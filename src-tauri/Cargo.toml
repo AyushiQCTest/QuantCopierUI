@@ -1,0 +1,31 @@
+[package]
+name = "QuantCopierTelegramUI"
+version = "0.1.0"
+description = "QuantCopier - TradeCopier built with Tauri NextJS for Telegram and MetaTrader5"
+authors = ["Dilip Rajkumar"]
+license = ""
+repository = ""
+edition = "2024"
+rust-version = "1.86.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.1", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.6.1", features = [] }
+tauri-build = { version = "2.6.1" }
+tauri-plugin-log = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "v2" }
+tauri-plugin-shell = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "v2" }
+tauri-plugin-http = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "v2" }
+tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "v2" }
+tauri-plugin-opener = {git = "https://github.com/tauri-apps/plugins-workspace", branch = "v2"}
+sysinfo = "0.37.2"
