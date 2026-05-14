@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "QuantCopierMT5"
-#define MyAppVersion "1.0"
+#define MyAppVersion "1.3.1"
 #define MyAppPublisher "QuantTraderTools"
 #define MyAppURL "QuantTraderTools.com"
 #define MyAppExeName "QuantCopierMT5.exe"

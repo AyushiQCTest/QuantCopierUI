@@ -8,13 +8,14 @@ admin.initializeApp();
 /**
  * Cloud Function: Check License by Phone Number
  * 
- * Accepts a phone number via HTTP request and validates the user's license
- * against Firestore/Realtime Database.
+ * Accepts a phone number and password via HTTP request and validates the user's license
+ * against Firestore/Realtime Database. Requires authentication via password parameter.
  * 
  * Replaces hardcoded private key logic with secure service account authentication.
  * 
  * @param {Object} req - Express request object
  *   - req.body.phoneNumber (string): Phone number to validate (e.g., "+1234567890")
+ *   - req.body.password (string): Secret password for authentication
  * @param {Object} res - Express response object
  * 
  * @returns {Object} JSON response with validation status and license details
@@ -40,7 +41,25 @@ exports.checkLicense = functions.https.onRequest(async (req, res) => {
   }
 
   try {
-    const { phoneNumber } = req.body;
+    const { phoneNumber, password } = req.body;
+
+    // ========== SECURITY: Validate Password ==========
+    const VALID_PASSWORD = process.env.LICENSE_CHECK_PASSWORD || "your-secret-password";
+    
+    if (!password) {
+      return res.status(401).json({
+        status: "failed",
+        message: "Unauthorized: Password is required",
+      });
+    }
+
+    if (password !== VALID_PASSWORD) {
+      return res.status(403).json({
+        status: "failed",
+        message: "Forbidden: Invalid password",
+      });
+    }
+    // ================================================
 
     // Validate input
     if (!phoneNumber || typeof phoneNumber !== "string") {
@@ -173,10 +192,12 @@ function isLicenseValid(subscription) {
 /**
  * Cloud Function: Validate Multiple Licenses
  * 
- * Accepts an array of license keys and validates each one against the database.
+ * Accepts an array of license keys and password, validates each one against the database.
+ * Requires authentication via password parameter.
  * 
  * @param {Object} req - Express request object
  *   - req.body.licenseKeys (array): Array of license keys to validate
+ *   - req.body.password (string): Secret password for authentication
  * @param {Object} res - Express response object
  * 
  * @returns {Object} JSON response with validation status for each license
@@ -199,7 +220,25 @@ exports.validateLicenseKeys = functions.https.onRequest(async (req, res) => {
   }
 
   try {
-    const { licenseKeys } = req.body;
+    const { licenseKeys, password } = req.body;
+
+    // ========== SECURITY: Validate Password ==========
+    const VALID_PASSWORD = process.env.LICENSE_CHECK_PASSWORD || "your-secret-password";
+    
+    if (!password) {
+      return res.status(401).json({
+        status: "failed",
+        message: "Unauthorized: Password is required",
+      });
+    }
+
+    if (password !== VALID_PASSWORD) {
+      return res.status(403).json({
+        status: "failed",
+        message: "Forbidden: Invalid password",
+      });
+    }
+    // ================================================
 
     // Validate input
     if (!Array.isArray(licenseKeys) || licenseKeys.length === 0) {
