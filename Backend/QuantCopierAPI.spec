@@ -23,6 +23,7 @@ exe = EXE(
     a.datas,
     [],
     name='QuantCopierAPI',
+    version='1.3.0',  # Updated by workflow from DEPLOYMENT.md
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
