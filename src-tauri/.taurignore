@@ -1,0 +1,6 @@
+config.ini
+static/TG_UserProfilePic.jpg
+static/**/*.jpg
+static/**/*.png
+static/**/*.jpeg
+static/**/*.gif

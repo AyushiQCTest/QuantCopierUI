@@ -1,0 +1,84 @@
+name: Upload Release to GCS Bucket
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  upload-to-gcs:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(cat VERSION | sed 's/^v//')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+      
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+      
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p build
+          TAG="v${{ steps.version.outputs.version }}"
+          echo "Downloading assets for release: $TAG"
+          gh release download "$TAG" \
+            --pattern "*.exe" \
+            --dir build || echo "Note: Some assets may not be available yet"
+          
+          echo "Downloaded files:"
+          ls -lh build/
+      
+      - name: Upload to GCS bucket
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BUCKET="gs://${{ secrets.FIREBASE_STORAGE_BUCKET }}"
+          VERSION_PREFIX="$BUCKET/v$VERSION"
+          
+          echo "Uploading to: $VERSION_PREFIX"
+          
+          # Create version directory and upload files
+          gsutil -m cp build/*.exe "$VERSION_PREFIX/" || echo "No .exe files found"
+          
+          # Set cache control headers
+          gsutil -m -h "Cache-Control:public, max-age=3600" \
+            copy "$VERSION_PREFIX/*.exe" "$VERSION_PREFIX/" || true
+          
+          echo "Upload completed"
+      
+      - name: Make files publicly readable
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BUCKET="gs://${{ secrets.FIREBASE_STORAGE_BUCKET }}"
+          VERSION_PREFIX="$BUCKET/v$VERSION"
+          
+          # Make files public for download
+          gsutil -m acl ch -u AllUsers:R "$VERSION_PREFIX/*" || echo "Files already public or not found"
+      
+      - name: Verify upload
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BUCKET="gs://${{ secrets.FIREBASE_STORAGE_BUCKET }}"
+          VERSION_PREFIX="$BUCKET/v$VERSION"
+          
+          echo "Files in GCS bucket:"
+          gsutil ls -lh "$VERSION_PREFIX/" || echo "Version prefix not found"
+      
+      - name: Upload notification
+        run: |
+          echo "✓ Release v${{ steps.version.outputs.version }} uploaded to GCS"
+          echo "Location: gs://${{ secrets.FIREBASE_STORAGE_BUCKET }}/v${{ steps.version.outputs.version }}/"

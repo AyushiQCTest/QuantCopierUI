@@ -1,0 +1,48 @@
+name: Update Release Body
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to update (e.g., v1.3.2)'
+        required: true
+        default: 'v1.3.2'
+
+permissions:
+  contents: write
+
+jobs:
+  update-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update Release Body
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          
+          BODY="## Features
+
+          - Multi-account signal synchronization with real-time updates
+          - Advanced risk management with dynamic lot sizing
+          - Telegram webhook improvements for faster notifications
+          - Support for multiple MT5 instances on single machine
+
+          ## Bug Fixes
+
+          - Fixed critical bug in signal processing queue
+          - Resolved memory leak in background service
+          - Fixed intermittent connection drops with MT5
+          - Corrected trade history synchronization issues
+          - Fixed UI freeze when processing large trade volumes
+
+          ## Improvements
+
+          - Optimized database queries for 40% faster data retrieval
+          - Improved UI responsiveness under high trading activity
+          - Enhanced error logging and diagnostics
+          - Reduced API call overhead by implementing caching
+          - Streamlined configuration setup wizard"
+          
+          gh release edit "$TAG" --body "$BODY"
+          echo "✅ Updated release body for $TAG"

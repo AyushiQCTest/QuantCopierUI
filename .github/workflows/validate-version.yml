@@ -1,0 +1,63 @@
+name: Validate Version
+
+on:
+  pull_request:
+    paths:
+      - 'VERSION'
+  push:
+    branches:
+      - main
+    paths:
+      - 'VERSION'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Read VERSION file
+        id: version
+        run: |
+          VERSION=$(cat VERSION)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Validate version format
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Check if version matches semantic versioning
+          if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "✗ Invalid version format: $VERSION"
+            echo "Expected format: X.Y.Z (e.g., 1.3.2)"
+            exit 1
+          fi
+          
+          echo "✓ Version format valid: $VERSION"
+      
+      - name: Check version uniqueness
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v$VERSION"
+          
+          # Check if release tag already exists
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "✗ Release tag already exists: $TAG"
+            exit 1
+          fi
+          
+          echo "✓ Release tag is unique: $TAG"
+      
+      - name: Check consistency with package.json
+        run: |
+          VERSION=$(cat VERSION)
+          PACKAGE_VERSION=$(jq -r .version package.json 2>/dev/null || echo "")
+          
+          if [ -n "$PACKAGE_VERSION" ] && [ "$VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "⚠ Warning: VERSION and package.json versions don't match"
+            echo "  VERSION: $VERSION"
+            echo "  package.json: $PACKAGE_VERSION"
+          else
+            echo "✓ Version consistent across files"
+          fi
