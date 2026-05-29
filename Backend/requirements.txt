@@ -6,3 +6,4 @@ telethon
 dateparser
 pyinstaller
 firebase-admin
+python-dotenv

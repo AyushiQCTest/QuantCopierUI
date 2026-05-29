@@ -12,6 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ToastAction } from "@/components/ui/toast";
+import { Info } from "lucide-react";
+import { AboutModal } from "@/components/about-modal";
 
 interface SidebarProps {
   expanded: boolean;
@@ -23,7 +25,7 @@ interface SidebarProps {
 async function closeQuantCopierTelegram() {
   try {
     console.log("Closing existing QuantCopierDiscord");
-    const response = await fetch('http://127.0.0.1:8000/kill-telegram-copier', {
+    const response = await fetch('http://127.0.0.1:8001/kill-telegram-copier', {
       method: 'POST',
     });
     const data = await response.json();
@@ -48,6 +50,7 @@ export default function Sidebar({ expanded, onClose, currentStep }: SidebarProps
   const { toast, dismiss } = useToast();
   const { theme } = useContext(ThemeContext);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const { operationalSettings, fetchOperationalSettings } = useBackendData();
 
   // Load operational settings when component mounts
@@ -213,7 +216,7 @@ export default function Sidebar({ expanded, onClose, currentStep }: SidebarProps
         } ${styles.container} border-r p-0 z-50 transition-all duration-300 ${expanded ? "overlay" : ""
         }`}
     >
-      <ul className="space-y-4 p-4">
+      <ul className="flex flex-col h-full p-4 space-y-4">
         {/* Home Item */}
         <li className="flex items-center h-10 relative">
           <Tooltip content={!expanded ? homeItem.label : null}>
@@ -378,7 +381,39 @@ export default function Sidebar({ expanded, onClose, currentStep }: SidebarProps
             </div>
           </Tooltip>
         </li>
+
+        {/* Divider before Info */}
+        <li className="py-2 mt-auto">
+          <hr className={`border-t-2 opacity-50 ${styles.divider}`} />
+        </li>
+
+        {/* Info Item */}
+        <li className="flex items-center h-10 relative">
+          <Tooltip content={!expanded ? "About & Updates" : null}>
+            <div className="w-full h-full relative">
+              <button
+                className={`flex items-center gap-4 w-full h-full rounded-lg ${styles.text
+                  } ${!expanded ? "justify-center" : ""} hover:bg-gray-700/50 relative z-10`}
+                onClick={() => setAboutOpen(true)}
+                onMouseEnter={() => setHoveredItem("info")}
+                onMouseLeave={() => setHoveredItem(null)}
+                title="About QuantCopier (Info & Updates)"
+                aria-label="Open info and updates"
+              >
+                <div
+                  className={`flex items-center justify-center w-6 h-6 ${expanded ? "ml-2" : ""}`}
+                >
+                  <Info className="w-6 h-6" />
+                </div>
+                {expanded && <span>About & Updates</span>}
+              </button>
+            </div>
+          </Tooltip>
+        </li>
       </ul>
+
+      {/* About Modal */}
+      <AboutModal isOpen={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
   );
 }

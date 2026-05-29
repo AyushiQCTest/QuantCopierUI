@@ -8,6 +8,13 @@ import requests
 from DB_Service_FireBaseAdmin import DBService
 import threading
 from pydantic import BaseModel
+from dotenv import load_dotenv
+
+# Load environment variables from .env file (use absolute path for PyInstaller compatibility)
+env_path = os.path.join(os.path.dirname(__file__), '.env')
+load_dotenv(dotenv_path=env_path)
+print(f"[DEBUG] Loading .env from: {env_path}")
+print(f"[DEBUG] .env file exists: {os.path.exists(env_path)}")
 from typing import Optional, List
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -325,49 +332,69 @@ async def reset_auth():
     return JSONResponse(content={"message": "auth reset"}, status_code=200)
 
 
+async def _get_user_info_internal():
+    """
+    Helper function to retrieve Telegram user info.
+    Returns a dict with user data or raises an exception.
+    """
+    global TELEGRAM_CLIENT
+    try:
+        config_gen = config_ini()
+        config_data = config_gen.get_details_from_config()
+        
+        # Use global client if available
+        if TELEGRAM_CLIENT and TELEGRAM_CLIENT.is_connected() and await TELEGRAM_CLIENT.is_user_authorized():
+            client = TELEGRAM_CLIENT
+        else:
+            client = TelegramClient(StringSession(config_data['session_string_key']), TELEGRAM_API_ID, TELEGRAM_API_HASH)
+            await client.connect()
+        
+        if not await client.is_user_authorized():
+            raise Exception("User not authorized")
+        
+        me = await client.get_me()
+        profile_pic_path = 'static/TG_UserProfilePic.jpg'
+        
+        # On first startup (or if file doesn't exist), download fresh profile photo
+        if not os.path.exists(profile_pic_path):
+            try:
+                await client.download_profile_photo('me', file=profile_pic_path, download_big=True)
+            except:
+                pass  # If profile photo download fails, continue without it
+        
+        # Set URL if file exists, None otherwise
+        profile_photo_url = "/static/TG_UserProfilePic.jpg" if os.path.exists(profile_pic_path) else None
+        
+        # Format phone number with + prefix
+        formatted_phone = f"+{me.phone}" if me.phone and not me.phone.startswith('+') else me.phone
+        
+        return {
+            "username": me.username,
+            "lastName": me.last_name,
+            "firstName": me.first_name,
+            "phoneNumber": formatted_phone,
+            "profilePhotoUrl": profile_photo_url
+        }
+    except Exception as e:
+        print(f"ERROR in _get_user_info_internal: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise
+
+
 @app.get("/get_user_info")
 async def get_user_info():
     """
     Validates Telegram credentials and returns user info, including a profile photo URL.
     Downloads fresh profile photo on first startup, then reuses existing photo for subsequent calls.
     """
-    global TELEGRAM_CLIENT
-    config_gen = config_ini()
-    config_data = config_gen.get_details_from_config()
-    
-    # Use global client if available
-    if TELEGRAM_CLIENT and TELEGRAM_CLIENT.is_connected() and await TELEGRAM_CLIENT.is_user_authorized():
-        client = TELEGRAM_CLIENT
-    else:
-        client = TelegramClient(StringSession(config_data['session_string_key']), TELEGRAM_API_ID, TELEGRAM_API_HASH)
-        await client.connect()
-        
     try:
-        if await client.is_user_authorized():
-            me = await client.get_me()
-            profile_pic_path = 'static/TG_UserProfilePic.jpg'
-            
-            # On first startup (or if file doesn't exist), download fresh profile photo
-            if not hasattr(get_user_info, 'initialized') or not os.path.exists(profile_pic_path):
-                if os.path.exists(profile_pic_path):
-                    os.remove(profile_pic_path)
-                await client.download_profile_photo('me', file=profile_pic_path, download_big=True)
-                get_user_info.initialized = True
-
-            # Set URL if file exists, None otherwise
-            profile_photo_url = "/static/TG_UserProfilePic.jpg" if os.path.exists(profile_pic_path) else None
-
-            return JSONResponse(content={
-                "username": me.username,
-                "lastName": me.last_name,
-                "firstName": me.first_name,
-                "phoneNumber": me.phone,
-                "profilePhotoUrl": profile_photo_url
-            }, status_code=200)
-        else:
-            return JSONResponse(content={"status": "failed", "message": "The provided credentials are invalid."}, status_code=403)
+        user_data = await _get_user_info_internal()
+        return JSONResponse(content=user_data, status_code=200)
     except RPCError as e:
         return JSONResponse(content={"status": "failed", "message": f"An error occurred: {str(e)}"}, status_code=403)
+    except Exception as e:
+        return JSONResponse(content={"status": "failed", "message": f"An error occurred: {str(e)}"}, status_code=500)
 
 @app.get("/validate_user")
 async def validate_user():
@@ -381,14 +408,7 @@ async def validate_user():
         or error message if validation fails.
     """    
     try:
-        user_info_response = await get_user_info()
-        if user_info_response.status_code != 200:
-            return JSONResponse(
-                content={"status": "failed", "message": "Failed to get Telegram user info"},
-                status_code=401
-            )
-
-        user_data = json.loads(user_info_response.body.decode())
+        user_data = await _get_user_info_internal()
         phone_number = user_data.get("phoneNumber", "")
         formatted_phone = f"+{phone_number}" if not phone_number.startswith('+') else phone_number
 
@@ -417,8 +437,12 @@ async def validate_user():
             )
             
     except Exception as e:
+        error_msg = f"An error occurred during telegram user validation: {str(e)}"
+        print(f"ERROR in /validate_user: {error_msg}")
+        import traceback
+        traceback.print_exc()
         return JSONResponse(
-            content={"status": "failed", "message": f"An error occurred during telegram user validation: {str(e)}"},
+            content={"status": "failed", "message": error_msg},
             status_code=500
         )
     
@@ -1218,6 +1242,6 @@ if __name__ == "__main__":
     start_input_thread()
     initConfig()
     create_symbol_mapper_json()
-    uvicorn.run(app, host="127.0.0.1", port=8000, lifespan="on")
+    uvicorn.run(app, host="127.0.0.1", port=8001, lifespan="on")
     signal.signal(signal.SIGINT, lambda sig, frame: shutdown())
     signal.signal(signal.SIGTERM, lambda sig, frame: shutdown())

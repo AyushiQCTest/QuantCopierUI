@@ -33,8 +33,8 @@ export default function MT5AccountCard() {
 
   useEffect(() => {
     Promise.all([
-      axios.get<MT5Credentials>("http://localhost:8000/mt5/get_mt5_credentials"),
-      axios.get<MT5ValidityResponse>("http://localhost:8000/mt5/MT5AccountValidityExtCheck"),
+      axios.get<MT5Credentials>("http://localhost:8001/mt5/get_mt5_credentials"),
+      axios.get<MT5ValidityResponse>("http://localhost:8001/mt5/MT5AccountValidityExtCheck"),
     ])
       .then(([credRes, validRes]) => {
         setCredentials(credRes.data);
@@ -44,7 +44,7 @@ export default function MT5AccountCard() {
       .catch(async (err) => {
         console.error("Error in initial fetch:", err);
         try {
-          const credRes = await axios.get<MT5Credentials>("http://localhost:8000/mt5/get_mt5_credentials");
+          const credRes = await axios.get<MT5Credentials>("http://localhost:8001/mt5/get_mt5_credentials");
           setCredentials(credRes.data);
           setValidity(null);
           setError(null);

@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import pytz
 from pprint import pprint
@@ -27,16 +28,40 @@ class DBService:
                     self.ref = db.reference('/subscriberDetails')
                 except ValueError:
                     # If not initialized, initialize Firebase
-                    # Load credentials from environment variable
-                    cred_json = os.getenv('FIREBASE_CREDENTIALS')
-                    if not cred_json:
-                        raise ValueError("FIREBASE_CREDENTIALS environment variable not set. "
-                                       "Please set it to the Firebase service account JSON string or use FIREBASE_CREDENTIALS_PATH.")
+                    # Load credentials from file or environment variable
+                    cred_dict = None
                     
-                    try:
-                        cred_dict = json.loads(cred_json)
-                    except json.JSONDecodeError:
-                        raise ValueError("FIREBASE_CREDENTIALS is not valid JSON")
+                    # Determine base path - use PyInstaller's temp directory if bundled
+                    base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+                    
+                    # Try loading from FIREBASE_CREDENTIALS_PATH first (preferred method)
+                    cred_path = os.getenv('FIREBASE_CREDENTIALS_PATH')
+                    if cred_path:
+                        # If it's a relative path and running as PyInstaller bundle, prepend base path
+                        if not os.path.isabs(cred_path):
+                            full_cred_path = os.path.join(base_path, cred_path)
+                        else:
+                            full_cred_path = cred_path
+                        
+                        try:
+                            print(f"[DEBUG] Trying to load Firebase credentials from: {full_cred_path}")
+                            with open(full_cred_path, 'r') as f:
+                                cred_dict = json.load(f)
+                            print(f"[DEBUG] Successfully loaded Firebase credentials from {full_cred_path}")
+                        except (FileNotFoundError, json.JSONDecodeError) as e:
+                            print(f"[DEBUG] Failed to load from {full_cred_path}: {e}")
+                            raise ValueError(f"Failed to load Firebase credentials from {full_cred_path}: {e}")
+                    
+                    # Fall back to FIREBASE_CREDENTIALS env var if path not set
+                    if not cred_dict:
+                        cred_json = os.getenv('FIREBASE_CREDENTIALS')
+                        if not cred_json:
+                            raise ValueError("Neither FIREBASE_CREDENTIALS_PATH nor FIREBASE_CREDENTIALS environment variable set")
+                        
+                        try:
+                            cred_dict = json.loads(cred_json)
+                        except json.JSONDecodeError:
+                            raise ValueError("FIREBASE_CREDENTIALS is not valid JSON")
                     
                     cred = credentials.Certificate(cred_dict)
                     

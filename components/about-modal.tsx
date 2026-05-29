@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useContext } from "react";
 import { ThemeContext } from "@/lib/theme-config";
-import { Info, ExternalLink, X, Loader2, Check, AlertCircle } from "lucide-react";
+import { Info, X, Loader2, Check, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { autoUpdater, UpdateInfo } from "@/lib/auto-updater";
 
@@ -17,7 +17,7 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
   const { theme } = useContext(ThemeContext);
   const [version, setVersion] = useState("1.3.2");
   const [releaseNotesUrl, setReleaseNotesUrl] = useState(
-    "https://releases.quanttradertools.com"
+    "https://quant-copier-release-notes.vercel.app/"
   );
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>("idle");
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -28,7 +28,7 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
     // Try to fetch version from backend
     const fetchVersion = async () => {
       try {
-        const response = await fetch("http://localhost:8000/api/version");
+        const response = await fetch("http://localhost:8001/api/version");
         if (response.ok) {
           const data = await response.json();
           setVersion(data.version);
@@ -55,6 +55,10 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
         } else {
           setUpdateStatus("up-to-date");
         }
+        // Open release notes after a short delay
+        setTimeout(() => {
+          window.open(releaseNotesUrl, "_blank");
+        }, 500);
       } else {
         setUpdateStatus("error");
         setErrorMessage("Failed to check for updates");
@@ -65,10 +69,14 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
     }
   };
 
+  const handleVisitReleaseNotes = () => {
+    window.open(releaseNotesUrl, "_blank");
+  };
+
   const handleDownloadUpdate = async () => {
     setIsDownloading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/download-update", {
+      const response = await fetch("http://localhost:8001/api/download-update", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -121,17 +129,6 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
 
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
-          <div
-            className={`p-2 rounded-lg ${
-              theme === "dark" ? "bg-blue-900/30" : "bg-blue-50"
-            }`}
-          >
-            <Info
-              className={`w-6 h-6 ${
-                theme === "dark" ? "text-blue-400" : "text-blue-600"
-              }`}
-            />
-          </div>
           <h2
             className={`text-xl font-semibold ${
               theme === "dark" ? "text-white" : "text-gray-900"
@@ -221,6 +218,20 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
             </Button>
           </div>
 
+          {/* Visit Release Notes Link */}
+          <div className="pt-4 text-center">
+            <button
+              onClick={handleVisitReleaseNotes}
+              className={`text-sm underline transition-colors ${
+                theme === "dark"
+                  ? "text-blue-400 hover:text-blue-300"
+                  : "text-blue-600 hover:text-blue-700"
+              }`}
+            >
+              Visit Release Notes
+            </button>
+          </div>
+
           {/* Download Update Button */}
           {updateStatus === "update-available" && (
             <div>
@@ -241,22 +252,7 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
             </div>
           )}
 
-          {/* Release Notes Link */}
-          <div className="pt-4 border-t border-gray-700">
-            <a
-              href={releaseNotesUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                theme === "dark"
-                  ? "bg-blue-900/20 text-blue-400 hover:bg-blue-900/40"
-                  : "bg-blue-50 text-blue-600 hover:bg-blue-100"
-              }`}
-            >
-              <span>View Release Notes</span>
-              <ExternalLink className="w-4 h-4" />
-            </a>
-          </div>
+
         </div>
 
         {/* Footer */}

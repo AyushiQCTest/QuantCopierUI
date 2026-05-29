@@ -3,22 +3,21 @@
 import { useState, useContext } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { Menu, UserCircle, Sun, Moon, Info } from "lucide-react";
+import { Menu, UserCircle, Sun, Moon } from "lucide-react";
 import ProfileDropdown from "@/components/home/ProfileDropdown";
 import { ThemeContext } from "@/lib/theme-config";
 import { useBackendData } from "@/src/context/BackendDataContext";
-import { AboutModal } from "@/components/about-modal";
+
 
 export default function EnhancedHeader({ toggleSidebar }: { toggleSidebar?: () => void }) {
   const [profileOpen, setProfileOpen] = useState(false);
-  const [aboutOpen, setAboutOpen] = useState(false);
   const { theme, toggleTheme } = useContext(ThemeContext);
   const { userInfo } = useBackendData();
   const [imageError, setImageError] = useState(false);
 
   // Derive the profile photo URL from context (if present)
   const profilePhotoUrl = userInfo?.profilePhotoUrl && !imageError
-    ? `http://localhost:8000${userInfo.profilePhotoUrl}`
+    ? `http://localhost:8001${userInfo.profilePhotoUrl}`
     : null;
 
   const getThemeStyles = () => ({
@@ -73,16 +72,6 @@ export default function EnhancedHeader({ toggleSidebar }: { toggleSidebar?: () =
         <div className="flex items-center space-x-4">
           <Button
             variant="ghost"
-            onClick={() => setAboutOpen(true)}
-            className={`p-2 ${
-              theme === "dark" ? "hover:bg-gray-800" : "hover:bg-gray-100"
-            } rounded-full transition-colors`}
-            title="About QuantCopier"
-          >
-            <Info className="w-6 h-6 text-blue-500 hover:text-blue-600" />
-          </Button>
-          <Button
-            variant="ghost"
             onClick={toggleTheme}
             className={`p-2 ${
               theme === "dark" ? "hover:bg-gray-800" : "hover:bg-gray-100"
@@ -119,7 +108,6 @@ export default function EnhancedHeader({ toggleSidebar }: { toggleSidebar?: () =
           {profileOpen && <ProfileDropdown />}
         </div>
       </div>
-      <AboutModal isOpen={aboutOpen} onClose={() => setAboutOpen(false)} />
     </header>
   );
 }

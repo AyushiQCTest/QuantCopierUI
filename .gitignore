@@ -27,6 +27,9 @@ yarn-error.log*
 # local env files
 .env*.local
 
+.env
+
+
 # vercel
 .vercel
 
@@ -61,3 +64,8 @@ src-tauri/*.log
 src-tauri/*.env
 src-tauri/signals.json
 src-tauri/symbol_mapper.json
+Backend/.env
+
+Backend/.env.bak
+
+Backend/firebase-credentials.json

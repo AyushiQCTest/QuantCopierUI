@@ -53,7 +53,7 @@ class TauriAutoUpdater {
       console.log('[AutoUpdater] Checking for updates...');
 
       // Call the backend check endpoint
-      const response = await fetch('http://localhost:8000/api/check-update', {
+      const response = await fetch('http://localhost:8001/api/check-update', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -94,7 +94,7 @@ class TauriAutoUpdater {
     try {
       console.log('[AutoUpdater] Applying update...');
 
-      const response = await fetch('http://localhost:8000/api/apply-update', {
+      const response = await fetch('http://localhost:8001/api/apply-update', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -135,4 +135,5 @@ class TauriAutoUpdater {
 const autoUpdater = new TauriAutoUpdater();
 
 // Export for use in app
-export { autoUpdater, UpdateInfo };
+export { autoUpdater };
+export type { UpdateInfo };

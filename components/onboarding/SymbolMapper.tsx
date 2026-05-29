@@ -9,7 +9,7 @@ import axios, { AxiosError } from "axios"; // Import AxiosError
 import { Loader2, Trash2, Pencil } from "lucide-react";
 import { ThemeContext } from "@/lib/theme-config";
 
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = "http://localhost:8001";
 
 interface SymbolMapperProps {
   onBack?: () => void;

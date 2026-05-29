@@ -3,7 +3,6 @@ import { useState, useContext, useEffect } from "react";
 import HomeDashboard from "@/components/home/HomeDashboard";
 import Sidebar from "@/components/home/Sidebar";
 import EnhancedHeader from "@/components/home/EnhancedHeader";
-import { FloatingInfoButton } from "@/components/floating-info-button";
 import { ThemeContext } from "@/lib/theme-config";
 
 export default function HomePage() {
@@ -37,9 +36,6 @@ export default function HomePage() {
       <main className="pt-[88px] px-6">
         <HomeDashboard />
       </main>
-
-      {/* Floating Info Button */}
-      <FloatingInfoButton />
 
       {/* Overlay when sidebar is expanded */}
       {sidebarExpanded && (
