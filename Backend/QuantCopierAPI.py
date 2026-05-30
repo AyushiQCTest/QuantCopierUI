@@ -1048,6 +1048,50 @@ def get_latest_release_from_github() -> Optional[dict]:
         return None
 
 
+def get_latest_release_from_storage_manifest() -> Optional[dict]:
+    """Fetch latest release metadata from bucket root releases.json."""
+    try:
+        import urllib.request
+
+        bucket_raw = os.getenv('FIREBASE_STORAGE_BUCKET', 'quantcopier-releases')
+        bucket = bucket_raw.replace('gs://', '').strip('/')
+        if bucket.endswith('.firebasestorage.app'):
+            bucket = bucket.replace('.firebasestorage.app', '')
+
+        manifest_url = f"https://storage.googleapis.com/{bucket}/releases.json"
+        req = urllib.request.Request(
+            manifest_url,
+            headers={'User-Agent': 'QuantCopierAPI/1.0'}
+        )
+
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode('utf-8'))
+
+        latest_version = str(data.get('latest', '')).lstrip('v')
+        if not latest_version:
+            return None
+
+        files = data.get('files') if isinstance(data.get('files'), dict) else {}
+        downloads = data.get('downloads') if isinstance(data.get('downloads'), dict) else {}
+        base_url = data.get('url') or data.get('baseUrl', '')
+
+        installer_name = files.get('mainInstaller', 'setup.exe')
+        download_url = downloads.get('mainInstaller')
+        if not download_url and base_url:
+            download_url = f"{base_url}{installer_name}"
+
+        return {
+            'version': latest_version,
+            'name': installer_name,
+            'download_url': download_url,
+            'manifest_url': manifest_url,
+            'updated_at': data.get('updatedAt'),
+        }
+    except Exception as e:
+        print(f"Error fetching releases manifest: {e}")
+        return None
+
+
 @app.get("/api/check-update")
 async def check_update():
     """
@@ -1064,13 +1108,14 @@ async def check_update():
         
         current_version = get_ui_version()
         
-        # Try GCP bucket first
+        # Try releases manifest first, then legacy GCP scan, then GitHub.
+        latest_info = get_latest_release_from_storage_manifest()
         gcp_info = None
-        if gcp_bucket_manager.bucket:
+        if not latest_info and gcp_bucket_manager.bucket:
             gcp_info = gcp_bucket_manager.get_latest_version("setup.exe")
-        
-        # Fall back to GitHub if GCP not available
-        latest_info = gcp_info or get_latest_release_from_github()
+            latest_info = gcp_info
+        if not latest_info:
+            latest_info = get_latest_release_from_github()
         
         if not latest_info:
             return JSONResponse(
@@ -1083,15 +1128,15 @@ async def check_update():
             )
         
         # Compare versions
-        latest_version = latest_info.get('version') or latest_info.get('version')
+        latest_version = latest_info.get('version')
         available = compare_versions(current_version, latest_version) < 0
         
         # Get download URL if available
         download_url = None
-        if gcp_info and 'blob_name' in gcp_info:
-            download_url = gcp_bucket_manager.get_download_url(gcp_info['blob_name'])
-        elif latest_info and 'download_url' in latest_info:
+        if latest_info and latest_info.get('download_url'):
             download_url = latest_info['download_url']
+        elif gcp_info and 'blob_name' in gcp_info:
+            download_url = gcp_bucket_manager.get_download_url(gcp_info['blob_name'])
         
         return JSONResponse(
             content={
@@ -1157,8 +1202,12 @@ async def download_update(background_tasks: BackgroundTasks):
         
         current_version = get_ui_version()
         
-        # Check GCP bucket for latest version
-        latest_info = gcp_bucket_manager.get_latest_version("setup.exe")
+        # Check releases manifest first, then fallback to GCP scan.
+        latest_info = get_latest_release_from_storage_manifest()
+        use_gcp_blob = False
+        if not latest_info:
+            latest_info = gcp_bucket_manager.get_latest_version("setup.exe")
+            use_gcp_blob = latest_info is not None
         
         if not latest_info:
             return JSONResponse(
@@ -1177,7 +1226,15 @@ async def download_update(background_tasks: BackgroundTasks):
         temp_path = Path(__file__).parent / "temp_update" / f"setup-{latest_info['version']}.exe"
         temp_path.parent.mkdir(parents=True, exist_ok=True)
         
-        success = gcp_bucket_manager.download_file(latest_info['blob_name'], str(temp_path))
+        success = False
+        if use_gcp_blob and latest_info.get('blob_name'):
+            success = gcp_bucket_manager.download_file(latest_info['blob_name'], str(temp_path))
+        elif latest_info.get('download_url'):
+            response = requests.get(latest_info['download_url'], timeout=60)
+            if response.status_code == 200:
+                with open(temp_path, 'wb') as f:
+                    f.write(response.content)
+                success = True
         
         if success:
             # Replace current executable with new one

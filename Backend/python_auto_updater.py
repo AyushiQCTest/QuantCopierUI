@@ -9,6 +9,8 @@ import json
 import shutil
 import subprocess
 import logging
+import urllib.request
+import urllib.error
 from pathlib import Path
 from typing import Optional, Tuple
 from datetime import datetime
@@ -19,6 +21,25 @@ logging.basicConfig(
     format='[%(asctime)s][%(name)s] %(levelname)s: %(message)s'
 )
 logger = logging.getLogger("PythonAutoUpdater")
+
+FIREBASE_BUCKET_RAW = os.getenv('FIREBASE_STORAGE_BUCKET', 'finsentric-website-hosting.firebasestorage.app')
+_bucket = FIREBASE_BUCKET_RAW.replace('gs://', '').strip('/')
+if _bucket.endswith('.firebasestorage.app'):
+    _bucket = _bucket.replace('.firebasestorage.app', '')
+FIREBASE_BUCKET = _bucket
+RELEASES_JSON_URL = f"https://storage.googleapis.com/{FIREBASE_BUCKET}/releases.json"
+
+
+def _resolve_component_key(exe_name: str) -> Optional[str]:
+    """Map an executable name to releases.json component key."""
+    name = exe_name.lower()
+    if 'setup' in name:
+        return 'mainInstaller'
+    if 'qc-demo' in name or 'qcdemo' in name or 'telegram' in name:
+        return 'qcdemoSidecar'
+    if 'api' in name:
+        return 'apiSidecar'
+    return None
 
 
 def get_current_version() -> str:
@@ -98,60 +119,55 @@ def check_gcp_bucket_for_update(exe_name: str) -> Optional[dict]:
         Dict with update info or None if no update available
     """
     try:
-        from google.cloud import storage
-        
-        logger.info(f"Checking GCP bucket for {exe_name}...")
-        
-        client = storage.Client()
-        bucket = client.bucket("quantcopier-releases")
-        
-        # Get current version
-        current_version = get_current_version()
-        
-        # List all blobs and find versions
-        versions = {}
-        blobs = client.list_blobs("quantcopier-releases")
-        
-        for blob in blobs:
-            if exe_name in blob.name and '/v' in blob.name:
-                parts = blob.name.split('/')
-                if len(parts) >= 2 and parts[0].startswith('v'):
-                    version_str = parts[0][1:]  # Remove 'v' prefix
-                    try:
-                        version_tuple = tuple(map(int, version_str.split('.')))
-                        versions[version_tuple] = {
-                            'version': version_str,
-                            'blob_name': blob.name,
-                            'size': blob.size,
-                            'updated_time': blob.updated,
-                        }
-                    except (ValueError, AttributeError):
-                        continue
-        
-        if not versions:
-            logger.info(f"No versions found in GCP bucket for {exe_name}")
+        logger.info(f"Checking releases.json for {exe_name}...")
+
+        req = urllib.request.Request(
+            RELEASES_JSON_URL,
+            headers={'User-Agent': 'PythonAutoUpdater/1.0'}
+        )
+
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode('utf-8'))
+
+        latest_version = str(data.get('latest', '')).lstrip('v')
+        if not latest_version:
+            logger.warning('releases.json missing latest version')
             return None
-        
-        # Get the highest version
-        latest_version_tuple = max(versions.keys())
-        latest_info = versions[latest_version_tuple]
-        latest_version = latest_info['version']
-        
-        logger.info(f"Latest version in GCP: {latest_version}, Current: {current_version}")
-        
-        # Check if update is available
-        if compare_versions(current_version, latest_version) < 0:
-            logger.info(f"Update available: {current_version} -> {latest_version}")
-            return latest_info
-        else:
+
+        current_version = get_current_version()
+        if compare_versions(current_version, latest_version) >= 0:
             logger.info(f"Already on latest version ({current_version})")
             return None
-    
-    except ImportError:
-        logger.warning("google-cloud-storage not installed, skipping GCP check")
+
+        files = data.get('files') if isinstance(data.get('files'), dict) else {}
+        downloads = data.get('downloads') if isinstance(data.get('downloads'), dict) else {}
+        base_url = data.get('url') or data.get('baseUrl', '')
+
+        component_key = _resolve_component_key(exe_name)
+        target_name = files.get(component_key) if component_key else exe_name
+        if not target_name:
+            target_name = exe_name
+
+        download_url = downloads.get(component_key) if component_key else None
+        if not download_url:
+            if not base_url:
+                logger.warning('releases.json missing download URL and base URL')
+                return None
+            download_url = f"{base_url}{target_name}"
+
+        logger.info(f"Update available: {current_version} -> {latest_version}")
+        return {
+            'version': latest_version,
+            'download_url': download_url,
+            'target_name': target_name,
+            'size': 0,
+        }
+
+    except urllib.error.URLError as e:
+        logger.error(f"Error fetching releases.json: {e}")
         return None
     except Exception as e:
-        logger.error(f"Error checking GCP bucket: {e}")
+        logger.error(f"Error checking updates from releases.json: {e}")
         return None
 
 
@@ -167,15 +183,19 @@ def download_update(blob_name: str, destination_path: str) -> bool:
         True if successful, False otherwise
     """
     try:
-        from google.cloud import storage
-        
         logger.info(f"Downloading {blob_name}...")
-        
+
+        if blob_name.startswith("http://") or blob_name.startswith("https://"):
+            urllib.request.urlretrieve(blob_name, destination_path)
+            logger.info(f"Downloaded to {destination_path}")
+            return True
+
+        from google.cloud import storage
         client = storage.Client()
-        bucket = client.bucket("quantcopier-releases")
+        bucket = client.bucket(FIREBASE_BUCKET)
         blob = bucket.blob(blob_name)
         blob.download_to_filename(destination_path)
-        
+
         logger.info(f"Downloaded to {destination_path}")
         return True
     except Exception as e:
@@ -271,9 +291,11 @@ def check_and_update(exe_name: Optional[str] = None) -> bool:
         
         # Download update
         new_version = update_info['version']
-        temp_exe_path = str(temp_dir / f"{exe_name}.new")
+        target_name = update_info.get('target_name', exe_name)
+        temp_exe_path = str(temp_dir / f"{Path(target_name).name}.new")
         
-        if not download_update(update_info['blob_name'], temp_exe_path):
+        download_source = update_info.get('download_url') or update_info.get('blob_name')
+        if not download_source or not download_update(download_source, temp_exe_path):
             logger.error("Failed to download update")
             return False
         
