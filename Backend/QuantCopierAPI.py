@@ -1075,7 +1075,7 @@ def get_latest_release_from_storage_manifest() -> Optional[dict]:
         downloads = data.get('downloads') if isinstance(data.get('downloads'), dict) else {}
         base_url = data.get('url') or data.get('baseUrl', '')
 
-        installer_name = files.get('mainInstaller', 'setup.exe')
+        installer_name = files.get('mainInstaller', 'QuantCopier.exe')
         download_url = downloads.get('mainInstaller')
         if not download_url and base_url:
             download_url = f"{base_url}{installer_name}"
@@ -1112,7 +1112,7 @@ async def check_update():
         latest_info = get_latest_release_from_storage_manifest()
         gcp_info = None
         if not latest_info and gcp_bucket_manager.bucket:
-            gcp_info = gcp_bucket_manager.get_latest_version("setup.exe")
+            gcp_info = gcp_bucket_manager.get_latest_version("QuantCopier.exe")
             latest_info = gcp_info
         if not latest_info:
             latest_info = get_latest_release_from_github()
@@ -1206,7 +1206,7 @@ async def download_update(background_tasks: BackgroundTasks):
         latest_info = get_latest_release_from_storage_manifest()
         use_gcp_blob = False
         if not latest_info:
-            latest_info = gcp_bucket_manager.get_latest_version("setup.exe")
+            latest_info = gcp_bucket_manager.get_latest_version("QuantCopier.exe")
             use_gcp_blob = latest_info is not None
         
         if not latest_info:
@@ -1223,7 +1223,7 @@ async def download_update(background_tasks: BackgroundTasks):
             )
         
         # Download the update file
-        temp_path = Path(__file__).parent / "temp_update" / f"setup-{latest_info['version']}.exe"
+        temp_path = Path(__file__).parent / "temp_update" / f"QuantCopier-{latest_info['version']}.exe"
         temp_path.parent.mkdir(parents=True, exist_ok=True)
         
         success = False
@@ -1238,11 +1238,11 @@ async def download_update(background_tasks: BackgroundTasks):
         
         if success:
             # Replace current executable with new one
-            current_exe = Path(__file__).parent.parent / "setup.exe"
+            current_exe = Path(__file__).parent.parent / "QuantCopier.exe"
             
             # Backup old file
             if current_exe.exists():
-                backup_path = current_exe.parent / f"setup-backup-{current_version}.exe"
+                backup_path = current_exe.parent / f"QuantCopier-backup-{current_version}.exe"
                 current_exe.rename(backup_path)
             
             # Move new file to current location

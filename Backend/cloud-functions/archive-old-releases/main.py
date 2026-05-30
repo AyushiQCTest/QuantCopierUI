@@ -5,7 +5,7 @@ Trigger: Cloud Pub/Sub triggered by Cloud Scheduler (daily) OR GCS object finali
 
 This function:
 1. Lists all versioned files in quantcopier-releases bucket
-2. Groups files by name pattern (setup.exe, QC-demo.exe, quant-copier-AP.exe)
+2. Groups files by name pattern (QuantCopier.exe, QuantCopierUI.exe, QuantCopierAPI.exe)
 3. For each pattern, keeps the latest version in Standard storage
 4. Moves all older versions to Archive storage
 5. Logs all actions for audit trail
@@ -36,9 +36,9 @@ logger = logging.getLogger(__name__)
 
 # File patterns to manage
 FILE_PATTERNS = [
-    "setup.exe",
-    "QC-demo.exe", 
-    "quant-copier-AP.exe"
+    "QuantCopier.exe",
+    "QuantCopierUI.exe",
+    "QuantCopierAPI.exe"
 ]
 
 # Bucket name
@@ -71,7 +71,7 @@ def extract_version_and_pattern(blob_name: str) -> Tuple[str, str, str]:
     """
     Extract version, file pattern, and blob name from path
     
-    Expected format: v1.3.2/setup.exe
+    Expected format: v1.3.2/QuantCopier.exe
     
     Returns:
         Tuple of (version_str, file_pattern, blob_name) or (None, None, blob_name) if not matched

@@ -30,15 +30,15 @@ class GCPBucketManager:
             self.client = None
             self.bucket = None
     
-    def get_latest_version(self, file_pattern: str = "setup.exe") -> Optional[Dict[str, Any]]:
+    def get_latest_version(self, file_pattern: str = "QuantCopier.exe") -> Optional[Dict[str, Any]]:
         """
         Get the latest version of a file from GCS bucket
         
-        Looks for files in versioned subfolders like /v0.1.4/setup.exe
+        Looks for files in versioned subfolders like /v0.1.4/QuantCopier.exe
         Compares version numbers and returns the latest
         
-        Args:
-            file_pattern: Pattern to search for (e.g., 'setup.exe', 'QC-demo.exe')
+            Args:
+            file_pattern: Pattern to search for (e.g., 'QuantCopier.exe', 'QuantCopierUI.exe')
         
         Returns:
             Dict with version, file path, size, and download info, or None if not found
@@ -53,7 +53,7 @@ class GCPBucketManager:
             blobs = self.client.list_blobs(self.bucket_name)
             
             for blob in blobs:
-                # Check if blob matches pattern and is in version folder (e.g., v0.1.4/setup.exe)
+                # Check if blob matches pattern and is in version folder (e.g., v0.1.4/QuantCopier.exe)
                 if file_pattern in blob.name and '/v' in blob.name:
                     parts = blob.name.split('/')
                     if len(parts) >= 2 and parts[0].startswith('v'):

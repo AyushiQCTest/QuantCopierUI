@@ -5,7 +5,7 @@ This guide explains how to set up automatic archival of old release versions fro
 ## Overview
 
 The goal is to:
-1. Keep the latest version of each file (setup.exe, QC-demo.exe, quant-copier-AP.exe) in **Standard storage** ($0.02/GB/month)
+1. Keep the latest version of each file (QuantCopier.exe, QuantCopierUI.exe, QuantCopierAPI.exe) in **Standard storage** ($0.02/GB/month)
 2. Automatically move older versions to **Archive storage** ($0.0012/GB/month) to save costs
 3. Maintain an audit trail of all versions
 
@@ -16,17 +16,17 @@ Files should be stored in versioned subfolders:
 ```
 quantcopier-releases/
 ├── v1.3.0/
-│   ├── setup.exe
-│   ├── QC-demo.exe
-│   └── quant-copier-AP.exe
+│   ├── QuantCopier.exe
+│   ├── QuantCopierUI.exe
+│   └── QuantCopierAPI.exe
 ├── v1.3.1/
-│   ├── setup.exe
-│   ├── QC-demo.exe
-│   └── quant-copier-AP.exe
+│   ├── QuantCopier.exe
+│   ├── QuantCopierUI.exe
+│   └── QuantCopierAPI.exe
 └── v1.3.2/
-    ├── setup.exe
-    ├── QC-demo.exe
-    └── quant-copier-AP.exe
+  ├── QuantCopier.exe
+  ├── QuantCopierUI.exe
+  └── QuantCopierAPI.exe
 ```
 
 ## Option 1: Using Terraform (Recommended)
@@ -200,13 +200,13 @@ This optional rule deletes very old archived versions to further save costs.
 
 2. **Manually via gsutil rewrite**
    ```bash
-   gsutil rewrite -s ARCHIVE gs://quantcopier-releases/v1.3.0/setup.exe
+  gsutil rewrite -s ARCHIVE gs://quantcopier-releases/v1.3.0/QuantCopier.exe
    ```
 
 3. **Using gcloud storage**
    ```bash
-   gcloud storage objects copy gs://quantcopier-releases/v1.3.0/setup.exe \
-     gs://quantcopier-releases/v1.3.0/setup.exe \
+   gcloud storage objects copy gs://quantcopier-releases/v1.3.0/QuantCopier.exe \
+     gs://quantcopier-releases/v1.3.0/QuantCopier.exe \
      --storage-class=ARCHIVE
    ```
 
@@ -258,7 +258,7 @@ gsutil ls -L -h -r gs://quantcopier-releases/**
 gsutil ls -L gs://quantcopier-releases/v1.3.0/
 
 # Check object metadata
-gsutil stat gs://quantcopier-releases/v1.3.0/setup.exe
+gsutil stat gs://quantcopier-releases/v1.3.0/QuantCopier.exe
 ```
 
 ### Common Issues

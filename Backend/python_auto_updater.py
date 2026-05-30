@@ -1,5 +1,5 @@
 """
-Auto-update module for Python executables (QC-demo.exe and quant-copier-AP.exe)
+Auto-update module for Python executables (QuantCopierUI.exe and QuantCopierAPI.exe)
 Checks GCP bucket for updates on startup and auto-updates if newer version is available
 """
 
@@ -33,11 +33,14 @@ RELEASES_JSON_URL = f"https://storage.googleapis.com/{FIREBASE_BUCKET}/releases.
 def _resolve_component_key(exe_name: str) -> Optional[str]:
     """Map an executable name to releases.json component key."""
     name = exe_name.lower()
-    if 'setup' in name:
+    # Main installer
+    if 'quantcopier' in name and 'ui' not in name and 'api' not in name:
         return 'mainInstaller'
-    if 'qc-demo' in name or 'qcdemo' in name or 'telegram' in name:
+    # UI sidecar
+    if 'quantcopierui' in name or 'ui.exe' in name or 'qc-demo' in name or 'qcdemo' in name or 'telegram' in name:
         return 'qcdemoSidecar'
-    if 'api' in name:
+    # API sidecar
+    if 'quantcopierapi' in name or name.endswith('api.exe') or ('api' in name and 'quantcopier' in name):
         return 'apiSidecar'
     return None
 
@@ -109,11 +112,11 @@ def check_gcp_bucket_for_update(exe_name: str) -> Optional[dict]:
     Check GCP bucket for newer version of the executable
     
     Looks in bucket for patterns like:
-    - /v1.3.2/QC-demo.exe
-    - /v1.3.2/quant-copier-AP.exe
-    
+    - /v1.3.2/QuantCopierUI.exe
+    - /v1.3.2/QuantCopierAPI.exe
+
     Args:
-        exe_name: Name of executable (e.g., 'QC-demo.exe')
+        exe_name: Name of executable (e.g., 'QuantCopierUI.exe')
     
     Returns:
         Dict with update info or None if no update available
@@ -264,7 +267,7 @@ def check_and_update(exe_name: Optional[str] = None) -> bool:
     This function should be called at application startup
     
     Args:
-        exe_name: Name of executable to check for (e.g., 'QC-demo.exe')
+        exe_name: Name of executable to check for (e.g., 'QuantCopierUI.exe')
                  If None, will use current executable name
     
     Returns:

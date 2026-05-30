@@ -242,13 +242,13 @@ Main Functions:
 3. check_gcp_bucket_for_update(exe_name: str) -> Optional[dict]
    ──────────────────────────────────────────────────────────────
    Check GCP bucket for available updates without applying.
-   - Args: exe_name (e.g., "QC-demo.exe")
+  - Args: exe_name (e.g., "QuantCopierUI.exe")
    - Returns: Dict with update info or None if no update
    
    Usage:
      from python_auto_updater import check_gcp_bucket_for_update
      
-     update_info = check_gcp_bucket_for_update("QC-demo.exe")
+    update_info = check_gcp_bucket_for_update("QuantCopierUI.exe")
      if update_info:
          print(f"Update available: {update_info['version']}")
      else:
@@ -286,9 +286,9 @@ Test the auto-updater without deploying:
    python python_auto_updater.py
 
 4. Verify GCP bucket connection:
-   python -c "from python_auto_updater import check_gcp_bucket_for_update; 
-              update = check_gcp_bucket_for_update('QC-demo.exe'); 
-              print(update)"
+  python -c "from python_auto_updater import check_gcp_bucket_for_update; 
+          update = check_gcp_bucket_for_update('QuantCopierUI.exe'); 
+          print(update)"
 
 5. Test version comparison:
    python -c "from python_auto_updater import compare_versions; 
