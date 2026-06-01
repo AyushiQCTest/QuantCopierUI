@@ -8,11 +8,23 @@ import json
 import requests
 from typing import Optional, Dict, Any
 from google.cloud import storage
+from google.oauth2 import service_account
 from pathlib import Path
 
 
 class GCPBucketManager:
     """Manages interactions with GCP Cloud Storage bucket for releases"""
+
+    @staticmethod
+    def _create_storage_client() -> storage.Client:
+        """Create a storage client from FIREBASE_SERVICE_ACCOUNT_KEY only."""
+        service_account_key = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY")
+        if not service_account_key:
+            raise ValueError("FIREBASE_SERVICE_ACCOUNT_KEY environment variable not set")
+
+        cred_dict = json.loads(service_account_key)
+        credentials = service_account.Credentials.from_service_account_info(cred_dict)
+        return storage.Client(credentials=credentials)
     
     def __init__(self, bucket_name: str = "quantcopier-releases"):
         """
@@ -23,7 +35,7 @@ class GCPBucketManager:
         """
         self.bucket_name = bucket_name
         try:
-            self.client = storage.Client()
+            self.client = self._create_storage_client()
             self.bucket = self.client.bucket(bucket_name)
         except Exception as e:
             print(f"[GCPBucketManager] Failed to initialize GCS client: {e}")

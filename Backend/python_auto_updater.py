@@ -14,6 +14,7 @@ import urllib.error
 from pathlib import Path
 from typing import Optional, Tuple
 from datetime import datetime
+from google.oauth2 import service_account
 
 # Configure logging
 logging.basicConfig(
@@ -194,7 +195,14 @@ def download_update(blob_name: str, destination_path: str) -> bool:
             return True
 
         from google.cloud import storage
-        client = storage.Client()
+
+        service_account_key = os.getenv('FIREBASE_SERVICE_ACCOUNT_KEY')
+        if not service_account_key:
+            raise ValueError('FIREBASE_SERVICE_ACCOUNT_KEY environment variable not set')
+
+        cred_dict = json.loads(service_account_key)
+        credentials = service_account.Credentials.from_service_account_info(cred_dict)
+        client = storage.Client(credentials=credentials)
         bucket = client.bucket(FIREBASE_BUCKET)
         blob = bucket.blob(blob_name)
         blob.download_to_filename(destination_path)
