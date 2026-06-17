@@ -1,17 +1,20 @@
 "use client";
 
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useRef } from "react";
 import { ThemeContext } from "@/lib/theme-config";
-import { Info, X, Loader2, Check, AlertCircle } from "lucide-react";
+import { Info, X, Loader2, Check, AlertCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { autoUpdater, UpdateInfo } from "@/lib/auto-updater";
+import { exit } from "@tauri-apps/plugin-process";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 
 interface AboutModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-type UpdateStatus = "idle" | "checking" | "update-available" | "up-to-date" | "error";
+type UpdateStatus = "idle" | "checking" | "update-available" | "up-to-date" | "error" | "downloaded";
 
 export function AboutModal({ isOpen, onClose }: AboutModalProps) {
   const { theme } = useContext(ThemeContext);
@@ -23,9 +26,13 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [countdown, setCountdown] = useState(5);
+  const [isExiting, setIsExiting] = useState(false);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    // Try to fetch version from backend
+    if (!isOpen) return;
+    // Re-fetch every time the modal opens so the version is always current
     const fetchVersion = async () => {
       try {
         const response = await fetch("http://localhost:8001/api/version");
@@ -35,13 +42,11 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
         }
       } catch (error) {
         console.error("Failed to fetch version:", error);
-        // Use default version from VERSION file
-        setVersion("1.3.2");
       }
     };
 
     fetchVersion();
-  }, []);
+  }, [isOpen]);
 
   const handleCheckForUpdates = async () => {
     setUpdateStatus("checking");
@@ -76,11 +81,22 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
   const handleDownloadUpdate = async () => {
     setIsDownloading(true);
     try {
+      let installDir: string | undefined;
+      try {
+        installDir = await invoke<string>("get_install_dir");
+      } catch (error) {
+        console.warn("[AboutModal] Could not resolve install dir from Tauri:", error);
+      }
+
       const response = await fetch("http://localhost:8001/api/download-update", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          install_dir: installDir,
+          restart_exe: "QuantCopierMT5.exe", // Prefer main installer for relaunch
+        }),
       });
 
       if (!response.ok) {
@@ -89,10 +105,22 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
 
       const result = await response.json();
       if (result.success) {
-        // Show restart prompt
-        alert("Update downloaded successfully. Please restart the application.");
-        // Restart the app
-        window.location.reload();
+        // Switch to countdown state — the detached PowerShell script is already running.
+        // It will wait 4 s, kill all QuantCopier processes, swap the binaries, and
+        // relaunch the app. We call exit(0) here so the app closes cleanly.
+        setUpdateStatus("downloaded");
+        setCountdown(5);
+
+        // Start countdown then exit
+        let remaining = 5;
+        countdownRef.current = setInterval(() => {
+          remaining -= 1;
+          setCountdown(remaining);
+          if (remaining <= 0) {
+            if (countdownRef.current) clearInterval(countdownRef.current);
+            doExit();
+          }
+        }, 1000);
       } else {
         throw new Error(result.message || "Update failed");
       }
@@ -103,6 +131,34 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
       setIsDownloading(false);
     }
   };
+
+  const doExit = () => {
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    setIsExiting(true);
+
+    // Primary: close the Tauri window (works in dev mode and production)
+    getCurrentWindow()
+      .close()
+      .catch(() => {
+        // Secondary: request process exit via plugin
+        exit(0).catch(() => {
+          // Last resort: native window.close (no-op in Tauri but harmless)
+          window.close();
+        });
+      });
+
+    // Nuclear fallback — if the window is still alive after 3 s, force exit
+    setTimeout(() => {
+      exit(0).catch(() => window.close());
+    }, 3000);
+  };
+
+  // Cleanup countdown on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, []);
 
   if (!isOpen) return null;
 
@@ -189,6 +245,21 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
               <span className="text-sm">Update available: v{updateInfo.latestVersion}</span>
             </div>
           )}
+          {updateStatus === "downloaded" && (
+            <div className="flex flex-col gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400">
+              <div className="flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span className="text-sm font-semibold">
+                  {isExiting
+                    ? "Closing app…"
+                    : `Update downloaded — closing in ${countdown}s`}
+                </span>
+              </div>
+              <p className="text-xs opacity-80">
+                The updater will replace files and relaunch the app automatically.
+              </p>
+            </div>
+          )}
           {updateStatus === "error" && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400">
               <AlertCircle className="w-4 h-4" />
@@ -246,7 +317,27 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
                     Downloading...
                   </>
                 ) : (
-                  "Download Update"
+                  "Download & Install Update"
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Exit Now button during countdown */}
+          {updateStatus === "downloaded" && (
+            <div>
+              <Button
+                onClick={doExit}
+                disabled={isExiting}
+                className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-70 disabled:cursor-not-allowed text-white"
+              >
+                {isExiting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Closing...
+                  </>
+                ) : (
+                  `Close Now${countdown > 0 ? ` (${countdown}s)` : ""}`
                 )}
               </Button>
             </div>
@@ -256,19 +347,21 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-2 mt-6">
-          <Button
-            onClick={onClose}
-            variant="default"
-            className={`${
-              theme === "dark"
-                ? "bg-blue-600 hover:bg-blue-700 text-white"
-                : "bg-blue-600 hover:bg-blue-700 text-white"
-            }`}
-          >
-            Close
-          </Button>
-        </div>
+        {updateStatus !== "downloaded" && (
+          <div className="flex justify-end gap-2 mt-6">
+            <Button
+              onClick={onClose}
+              variant="default"
+              className={`${
+                theme === "dark"
+                  ? "bg-blue-600 hover:bg-blue-700 text-white"
+                  : "bg-blue-600 hover:bg-blue-700 text-white"
+              }`}
+            >
+              Close
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

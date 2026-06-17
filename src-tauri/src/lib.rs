@@ -26,6 +26,46 @@ fn get_project_dir() -> String {
 }
 
 #[tauri::command]
+fn get_install_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
+    // In production, use the resource directory (where the app is installed)
+    if let Ok(resource) = app_handle.path().resource_dir() {
+        let resource_str = resource.to_string_lossy().to_string();
+        // In dev mode, resource_dir might be the debug build directory
+        // Check if we're in dev mode by looking for target/debug in the path
+        if !resource_str.contains("target") && !resource_str.contains("debug") {
+            return Ok(resource_str);
+        }
+    }
+
+    // Fallback to exe parent directory
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let parent_str = parent.to_string_lossy().to_string();
+            // If we're in a temp directory (PyInstaller), try to find the real install dir
+            if parent_str.contains("temp") || parent_str.contains("_MEI") {
+                // Try to find VERSION file in parent directories
+                let mut current = parent.to_path_buf();
+                for _ in 0..5 {
+                    let version_file = current.join("VERSION");
+                    if version_file.exists() {
+                        println!("[get_install_dir] Found VERSION at {:?}", current);
+                        return Ok(current.to_string_lossy().to_string());
+                    }
+                    if let Some(p) = current.parent() {
+                        current = p.to_path_buf();
+                    } else {
+                        break;
+                    }
+                }
+            }
+            return Ok(parent_str);
+        }
+    }
+
+    Err("Could not resolve install directory".to_string())
+}
+
+#[tauri::command]
 fn check_telegram_process() -> bool {
     let mut sys = System::new_all();
     sys.refresh_processes(ProcessesToUpdate::All, true);
@@ -190,7 +230,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![toggle_fullscreen, get_project_dir, check_telegram_process, launch_telegram_detached])
+        .invoke_handler(tauri::generate_handler![toggle_fullscreen, get_project_dir, get_install_dir, check_telegram_process, launch_telegram_detached])
         .build(tauri::generate_context!())
         .expect("Error while running tauri application")
         .run(|_app_handle, event| match event {

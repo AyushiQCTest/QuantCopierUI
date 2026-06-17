@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "QuantCopierMT5"
-#define MyAppVersion "1.3.1"
+#define MyAppVersion "1.3.2"
 #define MyAppPublisher "QuantTraderTools"
 #define MyAppURL "QuantTraderTools.com"
 #define MyAppExeName "QuantCopierMT5.exe"
@@ -47,7 +47,11 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "{#ParentPath}\src-tauri\target\release\QuantCopierTelegramUI.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#ParentPath}\src-tauri\binaries\QuantCopierAPI-x86_64-pc-windows-msvc.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#ParentPath}\src-tauri\binaries\QuantCopierAPI-x86_64-pc-windows-msvc.exe"; DestDir: "{app}"; DestName: "QuantCopierAPI.exe"; Flags: ignoreversion
+Source: "{#ParentPath}\..\qcdemo\dist\QuantCopierTelegram.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#ParentPath}\Backend\config.ini"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#ParentPath}\Backend\symbol_mapper.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#ParentPath}\Backend\static\*"; DestDir: "{app}\static"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]

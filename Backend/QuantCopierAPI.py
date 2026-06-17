@@ -16,7 +16,7 @@ load_dotenv(dotenv_path=env_path)
 print(f"[DEBUG] Loading .env from: {env_path}")
 print(f"[DEBUG] .env file exists: {os.path.exists(env_path)}")
 from typing import Optional, List
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
@@ -123,6 +123,10 @@ class SingleSymbolMapping(BaseModel):
 class UpdateSymbolRequest(BaseModel):
     new_source_symbol: str
     new_broker_symbol: str
+
+class DownloadUpdateRequest(BaseModel):
+    install_dir: Optional[str] = None
+    restart_exe: Optional[str] = None
 #endregion
 
 @app.get("/")
@@ -133,20 +137,11 @@ def read_root():
 def get_version():
     """
     Return the current version of QuantCopier.
-    This version is read from the VERSION file in the UI directory.
+    Delegates to get_ui_version() which checks, in order:
+      QUANTCOPIER_INSTALL_DIR env var → sys._MEIPASS bundle →
+      install dir heuristic → dev layout paths → hardcoded fallback.
     """
-    try:
-        # Try to read version from VERSION file
-        version_file = Path(__file__).parent.parent / "VERSION"
-        if version_file.exists():
-            with open(version_file, 'r') as f:
-                version = f.read().strip()
-                return {"version": version}
-    except Exception as e:
-        print(f"Error reading VERSION file: {e}")
-    
-    # Fallback to a default version
-    return {"version": "1.3.2"}
+    return {"version": get_ui_version()}
 
 sessions = {}
 
@@ -996,15 +991,150 @@ def create_symbol_mapper_json():
 # ============================================================================
 
 def get_ui_version() -> str:
-    """Get the UI version from VERSION file"""
+    """
+    Get the current UI version from the EXE properties or VERSION file.
+
+    Priority order:
+    1. Check file properties of the main GUI executable in the install directory.
+    2. QUANTCOPIER_INSTALL_DIR env var  — set by the PS updater after install.
+    3. QUANTCOPIER_SOURCE_DIR env var   — set in dev mode to point at the repo root.
+    4. sys._MEIPASS / VERSION           — bundled inside the frozen exe at build time.
+    5. resolve_install_dir() / VERSION  — heuristic for finding the real install root.
+    """
+    import sys
+    from pathlib import Path
+    from typing import Optional
+
+    def _get_file_version_from_properties(exe_path: Path) -> Optional[str]:
+        if sys.platform != "win32" or not exe_path.exists():
+            return None
+        import ctypes
+        from ctypes import wintypes
+        try:
+            size = ctypes.windll.version.GetFileVersionInfoSizeW(str(exe_path), None)
+            if not size:
+                return None
+            buffer = ctypes.create_string_buffer(size)
+            if not ctypes.windll.version.GetFileVersionInfoW(str(exe_path), 0, size, buffer):
+                return None
+            fixed_info_ptr = ctypes.c_void_p()
+            fixed_info_len = ctypes.c_uint()
+            if not ctypes.windll.version.VerQueryValueW(
+                buffer,
+                "\\",
+                ctypes.byref(fixed_info_ptr),
+                ctypes.byref(fixed_info_len)
+            ):
+                return None
+            
+            class VS_FIXEDFILEINFO(ctypes.Structure):
+                _fields_ = [
+                    ("dwSignature", wintypes.DWORD),
+                    ("dwStrucVersion", wintypes.DWORD),
+                    ("dwFileVersionMS", wintypes.DWORD),
+                    ("dwFileVersionLS", wintypes.DWORD),
+                    ("dwProductVersionMS", wintypes.DWORD),
+                    ("dwProductVersionLS", wintypes.DWORD),
+                    ("dwFileFlagsMask", wintypes.DWORD),
+                    ("dwFileFlags", wintypes.DWORD),
+                    ("dwFileOS", wintypes.DWORD),
+                    ("dwFileType", wintypes.DWORD),
+                    ("dwFileSubtype", wintypes.DWORD),
+                    ("dwFileDateMS", wintypes.DWORD),
+                    ("dwFileDateLS", wintypes.DWORD),
+                ]
+            fixed_info = VS_FIXEDFILEINFO.from_address(fixed_info_ptr.value)
+            major = (fixed_info.dwFileVersionMS >> 16) & 0xffff
+            minor = fixed_info.dwFileVersionMS & 0xffff
+            patch = (fixed_info.dwFileVersionLS >> 16) & 0xffff
+            
+            version_str = f"{major}.{minor}.{patch}"
+            print(f"[DEBUG][get_ui_version] Read version {version_str} from properties of {exe_path}")
+            return version_str
+        except Exception as e:
+            print(f"[DEBUG][get_ui_version] Error reading version properties from {exe_path}: {e}")
+            return None
+
+    def _try_read_version(path: Path) -> Optional[str]:
+        print(f"[DEBUG][get_ui_version] Checking VERSION at: {path}")
+        print(f"[DEBUG][get_ui_version] File exists: {path.exists()}")
+        if path.exists():
+            try:
+                v = path.read_text(encoding="utf-8-sig").strip()
+                if v:
+                    print(f"[DEBUG][get_ui_version] Read version: '{v}'")
+                    return v
+            except Exception as e:
+                print(f"[DEBUG][get_ui_version] Error reading {path}: {e}")
+        return None
+
+    # Try to query properties of main executables in the install directory first
     try:
-        version_file = Path(__file__).parent.parent / "VERSION"
-        if version_file.exists():
-            return version_file.read_text().strip()
+        from windows_updater import resolve_install_dir
+        install_dir = resolve_install_dir()
+        for candidate in ("QuantCopierTelegramUI.exe", "QuantCopierMT5.exe", "QuantCopier.exe"):
+            v = _get_file_version_from_properties(install_dir / candidate)
+            if v:
+                return v
     except Exception as e:
-        print(f"Error reading VERSION file: {e}")
-    
+        print(f"[DEBUG][get_ui_version] Heuristic properties lookup failed: {e}")
+
+    # 2. QUANTCOPIER_INSTALL_DIR env var — takes priority so the updated version
+    #    is shown immediately after the PS updater relaunches the app.
+    env_dir = os.getenv("QUANTCOPIER_INSTALL_DIR", "").strip()
+    if env_dir:
+        v = _try_read_version(Path(env_dir) / "VERSION")
+        if v:
+            return v
+
+    # 3. QUANTCOPIER_SOURCE_DIR — set this in .env or the shell when running in dev mode
+    #    to point at the repo root (the directory that contains the VERSION file).
+    src_dir = os.getenv("QUANTCOPIER_SOURCE_DIR", "").strip()
+    if src_dir:
+        v = _try_read_version(Path(src_dir) / "VERSION")
+        if v:
+            return v
+
+    # 4. sys._MEIPASS — only present when running as a frozen PyInstaller binary.
+    #    The VERSION file is bundled into the exe at build time (see QuantCopierAPI.spec).
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        v = _try_read_version(Path(meipass) / "VERSION")
+        if v:
+            return v
+
+    # 5. resolve_install_dir() heuristic (works when exe lives in the real install root)
+    try:
+        from windows_updater import resolve_install_dir
+        install_dir = resolve_install_dir()
+        v = _try_read_version(install_dir / "VERSION")
+        if v:
+            return v
+    except Exception as e:
+        print(f"[DEBUG][get_ui_version] Error checking install dir VERSION: {e}")
+
+    # 5. Walk up the directory tree from __file__ looking for VERSION.
+    #    In dev mode __file__ is Backend/QuantCopierAPI.py so parent is Backend/,
+    #    parent.parent is the repo root where VERSION lives.
+    #    In a frozen exe __file__ resolves into the temp _MEIPASS dir; we search
+    #    up to 6 levels which safely handles both layouts.
+    current = Path(__file__).resolve()
+    for _ in range(6):
+        current = current.parent
+        v = _try_read_version(current / "VERSION")
+        if v:
+            return v
+        if current == current.parent:  # filesystem root
+            break
+
+    # 6. Same directory as this script — Backend/VERSION
+    v = _try_read_version(Path(__file__).parent / "VERSION")
+    if v:
+        return v
+
+    print("[DEBUG][get_ui_version] VERSION file not found, using fallback '1.3.2'")
     return "1.3.2"
+
 
 
 def get_latest_release_from_github() -> Optional[dict]:
@@ -1020,6 +1150,7 @@ def get_latest_release_from_github() -> Optional[dict]:
         
         with urllib.request.urlopen(req, timeout=10) as response:
             releases = json.loads(response.read().decode('utf-8'))
+            print(f"[DEBUG][get_latest_release_from_github] Fetched {len(releases)} release(s) from GitHub")
             
             if not releases:
                 return None
@@ -1029,7 +1160,10 @@ def get_latest_release_from_github() -> Optional[dict]:
                 if release.get('prerelease'):
                     continue
                 
-                tag_name = release.get('tag_name', '').lstrip('v')
+                # Strip leading 'v' so version comparisons work correctly
+                # e.g. "v1.4.0" -> "1.4.0"
+                tag_name = release.get('tag_name', '').lstrip('v').strip()
+                print(f"[DEBUG][get_latest_release_from_github] Latest non-prerelease tag: '{tag_name}'")
                 
                 # Find installer asset
                 for asset in release.get('assets', []):
@@ -1041,83 +1175,123 @@ def get_latest_release_from_github() -> Optional[dict]:
                             'size': asset['size'],
                             'published_at': release.get('published_at'),
                         }
+
+                # Release exists but has no .exe asset yet — still return version info
+                # so the UI can show an update is available even without a direct download
+                if tag_name:
+                    print(f"[DEBUG][get_latest_release_from_github] No .exe asset found for {tag_name}, returning version only")
+                    return {
+                        'version': tag_name,
+                        'name': None,
+                        'download_url': None,
+                        'published_at': release.get('published_at'),
+                    }
         
         return None
     except Exception as e:
-        print(f"Error fetching latest release: {e}")
+        print(f"[DEBUG][get_latest_release_from_github] Error: {e}")
         return None
 
 
 def get_latest_release_from_storage_manifest() -> Optional[dict]:
-    """Fetch latest release metadata from bucket root releases.json."""
+    """Fetch latest release metadata from releases.json via authenticated GCS access."""
     try:
-        import urllib.request
-
-        bucket_raw = os.getenv('FIREBASE_STORAGE_BUCKET', 'quantcopier-releases')
-        bucket = bucket_raw.replace('gs://', '').strip('/')
-        if bucket.endswith('.firebasestorage.app'):
-            bucket = bucket.replace('.firebasestorage.app', '')
-
-        manifest_url = f"https://storage.googleapis.com/{bucket}/releases.json"
-        req = urllib.request.Request(
-            manifest_url,
-            headers={'User-Agent': 'QuantCopierAPI/1.0'}
+        from gcp_bucket_manager import (
+            fetch_releases_manifest_data,
+            release_info_from_manifest,
+            normalize_storage_bucket,
         )
 
-        with urllib.request.urlopen(req, timeout=10) as response:
-            data = json.loads(response.read().decode('utf-8'))
-
-        latest_version = str(data.get('latest', '')).lstrip('v')
-        if not latest_version:
+        data = fetch_releases_manifest_data()
+        if not data:
+            print("[DEBUG][get_latest_release_from_storage_manifest] Manifest fetch failed")
             return None
 
-        files = data.get('files') if isinstance(data.get('files'), dict) else {}
-        downloads = data.get('downloads') if isinstance(data.get('downloads'), dict) else {}
-        base_url = data.get('url') or data.get('baseUrl', '')
+        latest_info = release_info_from_manifest(data, component_key="mainInstaller")
+        if not latest_info:
+            print("[DEBUG][get_latest_release_from_storage_manifest] Manifest missing latest version")
+            return None
 
-        installer_name = files.get('mainInstaller', 'QuantCopier.exe')
-        download_url = downloads.get('mainInstaller')
-        if not download_url and base_url:
-            download_url = f"{base_url}{installer_name}"
-
-        return {
-            'version': latest_version,
-            'name': installer_name,
-            'download_url': download_url,
-            'manifest_url': manifest_url,
-            'updated_at': data.get('updatedAt'),
-        }
+        bucket = normalize_storage_bucket(
+            os.getenv("FIREBASE_STORAGE_BUCKET", "quantcopier-releases")
+        )
+        latest_info["manifest_url"] = f"gs://{bucket}/releases.json"
+        print(
+            f"[DEBUG][get_latest_release_from_storage_manifest] "
+            f"Latest version from manifest: '{latest_info.get('version')}' "
+            f"blob: {latest_info.get('blob_name')}"
+        )
+        return latest_info
     except Exception as e:
-        print(f"Error fetching releases manifest: {e}")
+        print(f"[DEBUG][get_latest_release_from_storage_manifest] Error: {e}")
         return None
+
+
+def compare_versions(v1: str, v2: str) -> int:
+    """
+    Compare two version strings, stripping any leading 'v' prefix.
+
+    Returns:
+        -1 if v1 < v2  (update available)
+         0 if equal
+         1 if v1 > v2
+    """
+    try:
+        # Normalise: strip whitespace and leading 'v' (e.g. "v1.4.0" -> "1.4.0")
+        v1_clean = v1.strip().lstrip('v')
+        v2_clean = v2.strip().lstrip('v')
+
+        v1_parts = tuple(map(int, v1_clean.split('.')))
+        v2_parts = tuple(map(int, v2_clean.split('.')))
+
+        print(f"[DEBUG][compare_versions] Comparing v1={v1_clean} ({v1_parts}) vs v2={v2_clean} ({v2_parts})")
+
+        if v1_parts < v2_parts:
+            print(f"[DEBUG][compare_versions] Result: -1 (update available)")
+            return -1
+        elif v1_parts > v2_parts:
+            print(f"[DEBUG][compare_versions] Result: 1 (current is newer)")
+            return 1
+        else:
+            print(f"[DEBUG][compare_versions] Result: 0 (same version)")
+            return 0
+    except Exception as e:
+        print(f"[DEBUG][compare_versions] Parse error: v1='{v1}' v2='{v2}' error={e}")
+        # Return -1 (treat as update available) so the user is not silently stuck
+        # on an old version if something unexpected is in the version strings.
+        return -1
 
 
 @app.get("/api/check-update")
 async def check_update():
     """
-    Check if a new version of QuantCopier UI is available
-    
-    Checks both GCP bucket and GitHub for latest version
-    Prioritizes GCP bucket if available, falls back to GitHub
-    
-    Returns:
-        JSON response with update availability status and version info
+    Check if a new version of QuantCopier UI is available.
+
+    Checks GCP storage manifest first, then legacy GCP scan, then GitHub.
+    Returns update availability status and version info.
     """
     try:
         from gcp_bucket_manager import gcp_bucket_manager
         
         current_version = get_ui_version()
+        print(f"[DEBUG][check_update] Current version: '{current_version}'")
         
         # Try releases manifest first, then legacy GCP scan, then GitHub.
         latest_info = get_latest_release_from_storage_manifest()
+        print(f"[DEBUG][check_update] Storage manifest result: {latest_info}")
+
         gcp_info = None
         if not latest_info and gcp_bucket_manager.bucket:
             gcp_info = gcp_bucket_manager.get_latest_version("QuantCopier.exe")
+            print(f"[DEBUG][check_update] GCP bucket scan result: {gcp_info}")
             latest_info = gcp_info
+
         if not latest_info:
             latest_info = get_latest_release_from_github()
+            print(f"[DEBUG][check_update] GitHub release result: {latest_info}")
         
         if not latest_info:
+            print("[DEBUG][check_update] No update source returned data.")
             return JSONResponse(
                 content={
                     "available": False,
@@ -1127,9 +1301,11 @@ async def check_update():
                 status_code=200
             )
         
-        # Compare versions
-        latest_version = latest_info.get('version')
+        latest_version = latest_info.get('version', '').strip().lstrip('v')
+        print(f"[DEBUG][check_update] Latest version resolved: '{latest_version}'")
+
         available = compare_versions(current_version, latest_version) < 0
+        print(f"[DEBUG][check_update] Update available: {available}")
         
         # Get download URL if available
         download_url = None
@@ -1150,7 +1326,9 @@ async def check_update():
             status_code=200
         )
     except Exception as e:
-        print(f"Error checking for update: {e}")
+        print(f"[DEBUG][check_update] Unexpected error: {e}")
+        import traceback
+        traceback.print_exc()
         return JSONResponse(
             content={"available": False, "error": str(e)},
             status_code=500
@@ -1160,8 +1338,8 @@ async def check_update():
 @app.post("/api/apply-update")
 async def apply_update(background_tasks: BackgroundTasks):
     """
-    Apply the downloaded update
-    This endpoint should be called after the update has been downloaded
+    Apply the downloaded update.
+    This endpoint should be called after the update has been downloaded.
     
     Returns:
         JSON response indicating success or failure
@@ -1190,109 +1368,65 @@ async def apply_update(background_tasks: BackgroundTasks):
 
 
 @app.post("/api/download-update")
-async def download_update(background_tasks: BackgroundTasks):
+async def download_update(body: Optional[DownloadUpdateRequest] = Body(default=None)):
     """
-    Download the latest update from GCP bucket
-    
-    Returns:
-        JSON response with download status
+    Download update artifacts to staging and launch a detached Windows updater script.
+
+    The GCS download is run in a thread-pool executor so it does NOT block the
+    FastAPI event loop (and therefore does not freeze the UI while downloading).
+    The script swaps binaries after the UI/API processes exit.
     """
     try:
-        from gcp_bucket_manager import gcp_bucket_manager
-        
+        import asyncio
+        import platform
+        from windows_updater import prepare_windows_update
+
+        if platform.system() != "Windows":
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "message": "Detached updater is only supported on Windows",
+                },
+                status_code=400,
+            )
+
         current_version = get_ui_version()
-        
-        # Check releases manifest first, then fallback to GCP scan.
         latest_info = get_latest_release_from_storage_manifest()
-        use_gcp_blob = False
-        if not latest_info:
-            latest_info = gcp_bucket_manager.get_latest_version("QuantCopier.exe")
-            use_gcp_blob = latest_info is not None
-        
         if not latest_info:
             return JSONResponse(
                 content={"success": False, "message": "No updates found in GCP bucket"},
-                status_code=404
+                status_code=404,
             )
-        
-        # Check if update is newer
-        if compare_versions(current_version, latest_info['version']) >= 0:
+
+        latest_version = latest_info.get("version", "").strip().lstrip("v")
+        if compare_versions(current_version, latest_version) >= 0:
             return JSONResponse(
                 content={"success": False, "message": "Already on latest version"},
-                status_code=200
+                status_code=200,
             )
-        
-        # Download the update file
-        temp_path = Path(__file__).parent / "temp_update" / f"QuantCopier-{latest_info['version']}.exe"
-        temp_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        success = False
-        if use_gcp_blob and latest_info.get('blob_name'):
-            success = gcp_bucket_manager.download_file(latest_info['blob_name'], str(temp_path))
-        elif latest_info.get('download_url'):
-            response = requests.get(latest_info['download_url'], timeout=60)
-            if response.status_code == 200:
-                with open(temp_path, 'wb') as f:
-                    f.write(response.content)
-                success = True
-        
-        if success:
-            # Replace current executable with new one
-            current_exe = Path(__file__).parent.parent / "QuantCopier.exe"
-            
-            # Backup old file
-            if current_exe.exists():
-                backup_path = current_exe.parent / f"QuantCopier-backup-{current_version}.exe"
-                current_exe.rename(backup_path)
-            
-            # Move new file to current location
-            temp_path.rename(current_exe)
-            
-            # Clean up temp directory
-            temp_path.parent.rmdir()
-            
-            return JSONResponse(
-                content={
-                    "success": True,
-                    "message": "Update downloaded successfully",
-                    "version": latest_info['version'],
-                    "requires_restart": True
-                },
-                status_code=200
-            )
-        else:
-            return JSONResponse(
-                content={"success": False, "message": "Failed to download update"},
-                status_code=500
-            )
-    
+
+        payload = body or DownloadUpdateRequest()
+
+        # Run the blocking GCS download + script launch in a thread pool so we
+        # don't block the event loop (which would freeze the UI spinner).
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,  # use default ThreadPoolExecutor
+            lambda: prepare_windows_update(
+                install_dir=payload.install_dir,
+                restart_exe=payload.restart_exe,
+            ),
+        )
+        return JSONResponse(content=result, status_code=200)
+
     except Exception as e:
         print(f"Error downloading update: {e}")
+        import traceback
+        traceback.print_exc()
         return JSONResponse(
             content={"success": False, "error": str(e)},
-            status_code=500
+            status_code=500,
         )
-
-
-def compare_versions(v1: str, v2: str) -> int:
-    """
-    Compare two version strings
-    
-    Returns:
-        -1 if v1 < v2, 0 if equal, 1 if v1 > v2
-    """
-    try:
-        v1_parts = tuple(map(int, v1.split('.')))
-        v2_parts = tuple(map(int, v2.split('.')))
-        
-        if v1_parts < v2_parts:
-            return -1
-        elif v1_parts > v2_parts:
-            return 1
-        else:
-            return 0
-    except Exception:
-        return 0
 
 
 if __name__ == "__main__":

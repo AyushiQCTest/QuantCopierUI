@@ -69,3 +69,5 @@ Backend/.env
 Backend/.env.bak
 
 Backend/firebase-credentials.json
+Backend/firebase_service_account_key.json
+

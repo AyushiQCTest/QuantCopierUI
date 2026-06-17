@@ -14,8 +14,6 @@ import urllib.error
 from pathlib import Path
 from typing import Optional, Tuple
 from datetime import datetime
-from google.oauth2 import service_account
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -23,26 +21,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger("PythonAutoUpdater")
 
-FIREBASE_BUCKET_RAW = os.getenv('FIREBASE_STORAGE_BUCKET', 'finsentric-website-hosting.firebasestorage.app')
-_bucket = FIREBASE_BUCKET_RAW.replace('gs://', '').strip('/')
-if _bucket.endswith('.firebasestorage.app'):
-    _bucket = _bucket.replace('.firebasestorage.app', '')
-FIREBASE_BUCKET = _bucket
-RELEASES_JSON_URL = f"https://storage.googleapis.com/{FIREBASE_BUCKET}/releases.json"
+from gcp_bucket_manager import (
+    GCPBucketManager,
+    fetch_releases_manifest_data,
+    release_info_from_manifest,
+    normalize_storage_bucket,
+)
+
+FIREBASE_BUCKET = normalize_storage_bucket(
+    os.getenv('FIREBASE_STORAGE_BUCKET')
+)
 
 
 def _resolve_component_key(exe_name: str) -> Optional[str]:
     """Map an executable name to releases.json component key."""
     name = exe_name.lower()
-    # Main installer
-    if 'quantcopier' in name and 'ui' not in name and 'api' not in name:
-        return 'mainInstaller'
-    # UI sidecar
-    if 'quantcopierui' in name or 'ui.exe' in name or 'qc-demo' in name or 'qcdemo' in name or 'telegram' in name:
-        return 'qcdemoSidecar'
-    # API sidecar
+    # API sidecar (e.g., QuantCopierAPI.exe)
     if 'quantcopierapi' in name or name.endswith('api.exe') or ('api' in name and 'quantcopier' in name):
         return 'apiSidecar'
+    # QCDemo sidecar (e.g., QuantCopierTelegram.exe / qcdemo.exe)
+    if ('quantcopiertelegram' in name and 'ui' not in name) or 'qc-demo' in name or 'qcdemo' in name:
+        return 'qcdemoSidecar'
+    # Main UI application (e.g., QuantCopierTelegramUI.exe, QuantCopierMT5.exe, QuantCopier.exe)
+    if 'quantcopier' in name or 'ui' in name:
+        return 'mainInstaller'
     return None
 
 
@@ -123,53 +125,35 @@ def check_gcp_bucket_for_update(exe_name: str) -> Optional[dict]:
         Dict with update info or None if no update available
     """
     try:
-        logger.info(f"Checking releases.json for {exe_name}...")
+        logger.info(f"Checking releases.json for {exe_name} (authenticated GCS)...")
 
-        req = urllib.request.Request(
-            RELEASES_JSON_URL,
-            headers={'User-Agent': 'PythonAutoUpdater/1.0'}
-        )
+        data = fetch_releases_manifest_data()
+        if not data:
+            logger.error('Failed to fetch releases.json from GCS')
+            return None
 
-        with urllib.request.urlopen(req, timeout=10) as response:
-            data = json.loads(response.read().decode('utf-8'))
-
-        latest_version = str(data.get('latest', '')).lstrip('v')
-        if not latest_version:
+        component_key = _resolve_component_key(exe_name) or 'mainInstaller'
+        release_info = release_info_from_manifest(data, component_key=component_key)
+        if not release_info:
             logger.warning('releases.json missing latest version')
             return None
 
+        latest_version = release_info['version']
         current_version = get_current_version()
         if compare_versions(current_version, latest_version) >= 0:
             logger.info(f"Already on latest version ({current_version})")
             return None
 
-        files = data.get('files') if isinstance(data.get('files'), dict) else {}
-        downloads = data.get('downloads') if isinstance(data.get('downloads'), dict) else {}
-        base_url = data.get('url') or data.get('baseUrl', '')
-
-        component_key = _resolve_component_key(exe_name)
-        target_name = files.get(component_key) if component_key else exe_name
-        if not target_name:
-            target_name = exe_name
-
-        download_url = downloads.get(component_key) if component_key else None
-        if not download_url:
-            if not base_url:
-                logger.warning('releases.json missing download URL and base URL')
-                return None
-            download_url = f"{base_url}{target_name}"
-
+        target_name = release_info.get('name') or exe_name
         logger.info(f"Update available: {current_version} -> {latest_version}")
         return {
             'version': latest_version,
-            'download_url': download_url,
+            'download_url': release_info.get('download_url'),
+            'blob_name': release_info.get('blob_name'),
             'target_name': target_name,
             'size': 0,
         }
 
-    except urllib.error.URLError as e:
-        logger.error(f"Error fetching releases.json: {e}")
-        return None
     except Exception as e:
         logger.error(f"Error checking updates from releases.json: {e}")
         return None
@@ -194,18 +178,9 @@ def download_update(blob_name: str, destination_path: str) -> bool:
             logger.info(f"Downloaded to {destination_path}")
             return True
 
-        from google.cloud import storage
-
-        service_account_key = os.getenv('FIREBASE_SERVICE_ACCOUNT_KEY')
-        if not service_account_key:
-            raise ValueError('FIREBASE_SERVICE_ACCOUNT_KEY environment variable not set')
-
-        cred_dict = json.loads(service_account_key)
-        credentials = service_account.Credentials.from_service_account_info(cred_dict)
-        client = storage.Client(credentials=credentials)
-        bucket = client.bucket(FIREBASE_BUCKET)
-        blob = bucket.blob(blob_name)
-        blob.download_to_filename(destination_path)
+        manager = GCPBucketManager(bucket_name=FIREBASE_BUCKET)
+        if not manager.download_file(blob_name, destination_path):
+            return False
 
         logger.info(f"Downloaded to {destination_path}")
         return True
@@ -305,7 +280,7 @@ def check_and_update(exe_name: Optional[str] = None) -> bool:
         target_name = update_info.get('target_name', exe_name)
         temp_exe_path = str(temp_dir / f"{Path(target_name).name}.new")
         
-        download_source = update_info.get('download_url') or update_info.get('blob_name')
+        download_source = update_info.get('blob_name') or update_info.get('download_url')
         if not download_source or not download_update(download_source, temp_exe_path):
             logger.error("Failed to download update")
             return False

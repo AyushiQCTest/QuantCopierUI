@@ -78,7 +78,29 @@ jobs:
           echo "Files in GCS bucket:"
           gsutil ls -lh "$VERSION_PREFIX/" || echo "Version prefix not found"
       
+      - name: Invoke archive function
+        id: archive
+        run: |
+          echo "Triggering archive function to move old versions to Archive storage..."
+          
+          # Get ID token for calling the function
+          ID_TOKEN=$(gcloud auth application-default print-access-token)
+          
+          # Call the archive function
+          FUNCTION_URL="https://us-central1-${{ secrets.GCP_PROJECT_ID }}.cloudfunctions.net/archive-old-releases"
+          
+          RESPONSE=$(curl --silent --show-error \
+            -H "Authorization: Bearer $ID_TOKEN" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            "$FUNCTION_URL" \
+            -d '{}')
+          
+          echo "Archive function response:"
+          echo "$RESPONSE" | jq '.' || echo "$RESPONSE"
+      
       - name: Upload notification
         run: |
           echo "✓ Release v${{ steps.version.outputs.version }} uploaded to GCS"
           echo "Location: gs://${{ secrets.FIREBASE_STORAGE_BUCKET }}/v${{ steps.version.outputs.version }}/"
+          echo "✓ Archive function triggered to move old versions to Archive storage"
