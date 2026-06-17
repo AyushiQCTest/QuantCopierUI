@@ -26,52 +26,12 @@ fn get_project_dir() -> String {
 }
 
 #[tauri::command]
-fn get_install_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
-    // In production, use the resource directory (where the app is installed)
-    if let Ok(resource) = app_handle.path().resource_dir() {
-        let resource_str = resource.to_string_lossy().to_string();
-        // In dev mode, resource_dir might be the debug build directory
-        // Check if we're in dev mode by looking for target/debug in the path
-        if !resource_str.contains("target") && !resource_str.contains("debug") {
-            return Ok(resource_str);
-        }
-    }
-
-    // Fallback to exe parent directory
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            let parent_str = parent.to_string_lossy().to_string();
-            // If we're in a temp directory (PyInstaller), try to find the real install dir
-            if parent_str.contains("temp") || parent_str.contains("_MEI") {
-                // Try to find VERSION file in parent directories
-                let mut current = parent.to_path_buf();
-                for _ in 0..5 {
-                    let version_file = current.join("VERSION");
-                    if version_file.exists() {
-                        println!("[get_install_dir] Found VERSION at {:?}", current);
-                        return Ok(current.to_string_lossy().to_string());
-                    }
-                    if let Some(p) = current.parent() {
-                        current = p.to_path_buf();
-                    } else {
-                        break;
-                    }
-                }
-            }
-            return Ok(parent_str);
-        }
-    }
-
-    Err("Could not resolve install directory".to_string())
-}
-
-#[tauri::command]
-fn check_telegram_process() -> bool {
+fn check_discord_process() -> bool {
     let mut sys = System::new_all();
     sys.refresh_processes(ProcessesToUpdate::All, true);
     
     for process in sys.processes().values() {
-        if process.name().eq_ignore_ascii_case("QuantCopierTelegram.exe") {
+        if process.name().eq_ignore_ascii_case("QuantCopierDiscord.exe") {
             return true;
         }
     }
@@ -79,15 +39,15 @@ fn check_telegram_process() -> bool {
 }
 
 #[tauri::command]
-async fn launch_telegram_detached(app_handle: tauri::AppHandle) -> Result<(), String> {
+async fn launch_discord_detached(app_handle: tauri::AppHandle) -> Result<(), String> {
     let resource_path = app_handle.path().resource_dir().map_err(|e| e.to_string())?;
     
-    // Construct path to binaries/QuantCopierTelegram.exe
-    let mut exe_path = resource_path.join("binaries").join("QuantCopierTelegram.exe");
+    // Construct path to binaries/QuantCopierDiscord.exe
+    let mut exe_path = resource_path.join("binaries").join("QuantCopierDiscord.exe");
     
     // If not found in binaries, check root
     if !exe_path.exists() {
-         exe_path = resource_path.join("QuantCopierTelegram.exe");
+         exe_path = resource_path.join("QuantCopierDiscord.exe");
     }
     
     println!("[tauri] Launching detached: {:?}", exe_path);
@@ -95,7 +55,7 @@ async fn launch_telegram_detached(app_handle: tauri::AppHandle) -> Result<(), St
     let cmd_name = if exe_path.exists() {
          exe_path.to_string_lossy().to_string()
     } else {
-        "binaries/QuantCopierTelegram.exe".to_string()
+        "binaries/QuantCopierDiscord.exe".to_string()
     };
     
     println!("[tauri] Final command path: {}", cmd_name);
@@ -106,7 +66,7 @@ async fn launch_telegram_detached(app_handle: tauri::AppHandle) -> Result<(), St
             Ok(_) => Ok(()),
             Err(e) => {
                  // Try one more time without "binaries/" prefix if it failed, just in case
-                 if let Ok(_) = Command::new("QuantCopierTelegram.exe")
+                 if let Ok(_) = Command::new("QuantCopierDiscord.exe")
                     .creation_flags(CREATE_NO_WINDOW | CREATE_BREAKAWAY_FROM_JOB)
                     .spawn() {
                         return Ok(());
@@ -230,7 +190,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![toggle_fullscreen, get_project_dir, get_install_dir, check_telegram_process, launch_telegram_detached])
+        .invoke_handler(tauri::generate_handler![toggle_fullscreen, get_project_dir, check_discord_process, launch_discord_detached])
         .build(tauri::generate_context!())
         .expect("Error while running tauri application")
         .run(|_app_handle, event| match event {

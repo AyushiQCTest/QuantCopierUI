@@ -1,166 +1,223 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { FaTelegram } from "react-icons/fa";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import axios from "axios";
-import { useRouter } from "next/navigation";
+import { Loader2, Trash2, Pencil } from "lucide-react";
 
-interface Step2AlertsProps {
+interface Channel {
+  id: string;
+  name: string;
+}
+
+interface Step2ChannelSelectProps {
   onNext: () => void;
   onBack: () => void;
   theme?: string;
   isRevisit: boolean;
 }
 
-interface Channel {
-  id: string;
-  name: string;
-  selected?: boolean;
-}
+const API_BASE_URL = "http://localhost:8000";
 
-const API_BASE_URL = "http://localhost:8001";
-
-export default function Step2Alerts({ onNext, onBack, theme, isRevisit }: Step2AlertsProps) {
+export default function Step2ChannelSelect({ onNext, onBack, theme, isRevisit }: Step2ChannelSelectProps) {
+  const [channels, setChannels] = useState<{ [key: string]: string }>({});
+  const [newChannelId, setNewChannelId] = useState("");
+  const [newChannelName, setNewChannelName] = useState("");
+  const [editingChannel, setEditingChannel] = useState<string | null>(null);
+  const [editedChannelName, setEditedChannelName] = useState("");
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [channels, setChannels] = useState<Channel[]>([]);
 
   useEffect(() => {
-    const initChannels = async () => {
-      setLoading(true);
-      try {
-        const channelsRes = await axios.get(`${API_BASE_URL}/get_channels`);
-        const channelsData = channelsRes.data.data || {};
-        const formattedChannels = Object.entries(channelsData).map(
-          ([id, name]) => ({
-            id,
-            name: name as string,
-            selected: false,
-          })
-        );
+    fetchDiscordChannels();
+  }, []);
 
-        const savedChannelsRes = await axios.get(`${API_BASE_URL}/get_selected_channels`);
-        const savedChannelsData = savedChannelsRes.data.data || {};
-        const selectedChannelIds = Object.keys(savedChannelsData);
-
-        const updatedChannels = formattedChannels.map((channel) => ({
-          ...channel,
-          selected: selectedChannelIds.includes(channel.id),
-        }));
-
-        setChannels(updatedChannels);
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: "Failed to fetch channels or saved selections",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
+  const fetchDiscordChannels = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/discord/channels`);
+      if (response.status === 200) {
+        setChannels(response.data.data);
       }
-    };
-
-    initChannels();
-  }, [toast]);
-
-  const handleSave = async () => {
-    const selectedChannels = channels.filter((ch) => ch.selected);
-    if (selectedChannels.length === 0) {
+    } catch (error) {
       toast({
         title: "Error",
-        description: "Please select at least one channel",
+        description: "Failed to fetch Discord channels",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddChannel = async () => {
+    if (!newChannelId) {
+      toast({
+        title: "Missing Information",
+        description: "Channel ID is required",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      const channelData = selectedChannels.map((ch) => ({
-        id: ch.id,
-        Channel_Name: ch.name,
+      await axios.post(`${API_BASE_URL}/discord/channels/save`, {
+        channel_id: newChannelId,
+        channel_name: newChannelName || `Channel ${newChannelId}`
+      });
+
+      setChannels(prev => ({
+        ...prev,
+        [newChannelId]: newChannelName || `Channel ${newChannelId}`
       }));
 
-      await axios.post(`${API_BASE_URL}/save_channels`, channelData);
-      onNext();
+      setNewChannelId("");
+      setNewChannelName("");
+      
+      toast({
+        title: "Success",
+        description: "Channel added successfully",
+      });
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to save channel configuration",
+        description: "Failed to add channel",
         variant: "destructive",
       });
     }
   };
 
+  const handleDelete = async (channelId: string) => {
+    try {
+      await axios.delete(`${API_BASE_URL}/discord/channels/delete/${channelId}`);
+      const updatedChannels = { ...channels };
+      delete updatedChannels[channelId];
+      setChannels(updatedChannels);
+      toast({
+        title: "Success",
+        description: "Channel removed successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to remove channel",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const getThemeStyles = () => ({
+    container: theme === "dark" ? "text-white" : "text-gray-900",
+    card: theme === "dark" ? "bg-black border-gray-800" : "bg-white border-gray-200",
+    textSecondary: theme === "dark" ? "text-gray-400" : "text-gray-600",
+    buttonPrimary: theme === "dark" 
+      ? "bg-blue-600 hover:bg-blue-700 text-white" 
+      : "bg-blue-600 hover:bg-blue-700 text-white",
+    buttonOutline: theme === "dark"
+      ? "border-gray-700 hover:bg-gray-800 text-white"
+      : "border-gray-300 hover:bg-gray-100 text-gray-900",
+    input: theme === "dark"
+      ? "bg-gray-800 border-gray-700 text-white"
+      : "bg-white border-gray-200 text-gray-900",
+    table: theme === "dark" ? "bg-gray-800" : "bg-gray-100",
+    tableBorder: theme === "dark" ? "border-gray-700" : "border-gray-200",
+  });
+
+  const styles = getThemeStyles();
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {!isRevisit && (
-        <div className="space-y-2">
-          <h2 className={`text-2xl font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-            Alerts Channel Setup
-          </h2>
-          <p className={theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}>
-            Configure your Telegram channel for receiving alerts
-          </p>
-        </div>
-      )}
+      <div className="space-y-2">
+        <h2 className={`text-2xl font-semibold ${styles.container}`}>
+          Configure Discord Channels
+        </h2>
+        <p className={styles.textSecondary}>
+          Add the Discord channels you want to monitor for trading signals.
+        </p>
+      </div>
 
-      <div className="space-y-6">
-        <div className={`${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'} p-6 rounded-lg space-y-4`}>
-          <div className="flex items-start space-x-4">
-            <div className={`${theme === 'dark' ? 'bg-black' : 'bg-gray-50'} p-3 rounded-full flex-shrink-0 relative`}>
-              <FaTelegram className={`w-6 h-6 ${theme === 'dark' ? 'text-[#22c55e]' : 'text-gray-600'} z-10`} />
-            </div>
-            <div className="flex-1">
-              <h3 className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'} mb-2`}>
-                Select Channels
-              </h3>
-              {loading ? (
-                <div className="flex items-center space-x-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className={theme === 'dark' ? 'text-sm text-gray-400' : 'text-sm text-gray-600'}>
-                    Loading channels...
-                  </span>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {channels.map((channel) => (
-                    <div key={channel.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        checked={channel.selected}
-                        onCheckedChange={(checked) => {
-                          setChannels(
-                            channels.map((ch) =>
-                              ch.id === channel.id
-                                ? { ...ch, selected: !!checked }
-                                : ch
-                            )
-                          );
-                        }}
-                      />
-                      <span className={theme === 'dark' ? 'text-white' : 'text-gray-900'}>{channel.name}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+      <div className={`max-h-96 overflow-y-auto ${styles.table} p-4 rounded-lg`}>
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th className={`text-left p-2 ${styles.container}`}>Channel ID</th>
+              <th className={`text-left p-2 ${styles.container}`}>Channel Name (Optional)</th>
+              <th className="text-right p-2">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(channels).map(([id, name]) => (
+              <tr key={id} className={`border-t ${styles.tableBorder}`}>
+                <td className={`p-2 ${styles.container}`}>{id}</td>
+                <td className={`p-2 ${styles.container}`}>{name}</td>
+                <td className="p-2 text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDelete(id)}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-100"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label className={styles.container}>Channel ID</Label>
+            <Input
+              value={newChannelId}
+              onChange={(e) => setNewChannelId(e.target.value)}
+              className={styles.input}
+              placeholder="Enter Discord channel ID"
+              required
+            />
           </div>
+          <div className="space-y-2">
+            <Label className={styles.container}>Channel Name (Optional)</Label>
+            <Input
+              value={newChannelName}
+              onChange={(e) => setNewChannelName(e.target.value)}
+              className={styles.input}
+              placeholder="Enter a friendly name for the channel"
+            />
+          </div>
+        </div>
+        <div className="flex justify-center">
+          <Button onClick={handleAddChannel} className={styles.buttonPrimary}>
+            <span className="text-xl mr-2">+</span> Add Channel
+          </Button>
         </div>
       </div>
 
       <div className={isRevisit ? "flex justify-center" : "flex justify-between"}>
         {isRevisit ? (
-          <Button onClick={handleSave}>Save</Button>
+          <Button onClick={onNext} className={styles.buttonPrimary}>
+            Save Changes
+          </Button>
         ) : (
           <>
-            <Button variant="outline" onClick={onBack}>
+            <Button variant="outline" onClick={onBack} className={styles.buttonOutline}>
               Previous Step
             </Button>
-            <Button onClick={handleSave}>Next Step</Button>
+            <Button onClick={onNext} className={styles.buttonPrimary}>
+              Continue
+            </Button>
           </>
         )}
       </div>

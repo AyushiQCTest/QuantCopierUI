@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "QuantCopierMT5",
-  "version": "1.3.2",
+  "productName": "QuantCopierMT5Discord",
+  "version": "0.1.0",
   "identifier": "com.quantcopier.dev",
   "build": {
     "frontendDist": "../out",
@@ -30,8 +30,9 @@
     ],
     "windows": {
       "nsis": {
-        "installerIcon": "icons/QuantCopierMT5TelegramSetup.ico",
+        "installerIcon": "icons/QuantCopierMT5DiscordSetup.ico",
         "installMode": "currentUser",
+        "installerHooks": "nsis/hooks.nsi",
         "template": "nsis/installer.nsi"
       }
     },
@@ -43,7 +44,8 @@
       "icons/icon.ico"
     ],
     "externalBin": [
-      "binaries/QuantCopierAPI"
+      "binaries/QuantCopierAPI",
+      "binaries/QuantCopierDiscord"
     ]
   }
 }

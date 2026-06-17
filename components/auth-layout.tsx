@@ -17,18 +17,18 @@ export function AuthLayout({ children }: AuthLayoutProps) {
       <div className="mb-8">
         {theme === "dark" ? (
           <Image
-            src="/QCT_Logo_Dark.svg"
-            alt="QCT Logo"
-            width={200}
-            height={80}
+            src="/QCD_Logo_Dark.svg"
+            alt="QCD Logo"
+            width={150}
+            height={60}
             priority
           />
         ) : (
           <Image
-            src="/QCT_Logo_Light.svg"
-            alt="QCT Logo"
-            width={200}
-            height={80}
+            src="/QCD_Logo_Light.svg"
+            alt="QCD Logo"
+            width={150}
+            height={60}
             priority
           />
         )}

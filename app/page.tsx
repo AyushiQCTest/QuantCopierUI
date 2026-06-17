@@ -13,7 +13,7 @@ import { handleExit } from "@/api/tauri";
 import { useRouter } from "next/navigation";
 import { useBackendData } from "@/src/context/BackendDataContext";
 
-const API_BASE_URL = "http://localhost:8001";
+const API_BASE_URL = "http://localhost:8000";
 
 type Step = "phone" | "verification" | "two-step" | "eula";
 

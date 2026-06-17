@@ -41,10 +41,11 @@ STAGING_DIR_NAME = ".update_staging"
 
 # Known names for the main UI executable (tried in order during target discovery).
 MAIN_EXE_CANDIDATES = (
-    "QuantCopierTelegramUI.exe",
+    "QuantCopierMT5Discord.exe",
+    "QuantCopierDiscordUI.exe",
     "QuantCopierMT5.exe",
     "QuantCopier.exe",
-    "quantcopiermt5.exe",
+    "quantcopiermt5discord.exe",
     "quantcopierui.exe",
 )
 
@@ -97,7 +98,7 @@ def resolve_install_dir(explicit: Optional[str] = None) -> Path:
                 if version_file.exists():
                     print(f"[resolve_install_dir] Found VERSION at {current}, using as install dir")
                     return current
-                main_exe = current / "QuantCopierTelegramUI.exe"
+                main_exe = current / "QuantCopierMT5Discord.exe"
                 if main_exe.exists():
                     print(f"[resolve_install_dir] Found main exe at {current}, using as install dir")
                     return current
@@ -293,7 +294,8 @@ Start-Sleep -Seconds 3
 # Step 2: Kill any remaining QuantCopier processes
 # ---------------------------------------------------------------------------
 $processNames = @(
-    "QuantCopierTelegramUI",
+    "QuantCopierMT5Discord",
+    "QuantCopierDiscord",
     "QuantCopierMT5",
     "QuantCopierAPI",
     "QuantCopierUI",

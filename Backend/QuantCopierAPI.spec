@@ -5,12 +5,7 @@ a = Analysis(
     ['QuantCopierAPI.py'],
     pathex=[],
     binaries=[],
-    datas=[
-        ('.env', '.'),
-        ('firebase-credentials.json', '.'),
-        ('config.ini', '.'),
-        ('symbol_mapper.json', '.'),
-    ],
+    datas=[],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -40,5 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version='api_version_info.txt',
+    icon='favicon.ico'
 )

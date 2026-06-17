@@ -15,18 +15,20 @@ To run the rendered tauri app along with the backend server sidecar (`QuantCopie
 ```
 npm run tauri dev
 ```
-To generate the sidecar executable, you have to clone the private [telegram-backend-repo](https://github.com/diliprk/telegram-backend/tree/main) and run the `generate_sidecar.sh` script in the root dir of the repo.
 
 To build the tauri application (.exe and .msi setup files)
 ```
 npm run tauri build
 ```
 
+To generate the sidecar executable, you have to clone the private [QuantCopierDiscord-BackEnd](https://github.com/diliprk/QuantCopier/tree/discord) and run the `generate_sidecar.sh` script in the root dir of the repo.
+
+To build the commercial setup file, open `QCDiscordMT5_SetupExe_Spec.iss` file in `InnoSetup` and hit the play button
+
 
 ### Starting Fresh
 Remove existing node modules and other files using `Git-bash`
 ```bash
-rm -rf node_modules out .next package-lock.json src-tauri/Cargo.lock src-tauri/config.ini src-tauri/*.log src-tauri/signals.json src-tauri/target/symbol_mapper.json src-tauri/symbol_mapper.json src-tauri/signals.json src-tauri/data src-tauri/static src-tauri/target src-tauri/binaries
+rm -rf node_modules out .next package-lock.json src-tauri/Cargo.lock src-tauri/*.log src-tauri/signals.json src-tauri/target/symbol_mapper.json src-tauri/symbol_mapper.json src-tauri/signals.json src-tauri/data src-tauri/static src-tauri/target src-tauri/config.ini src-tauri/binaries
 ```
-
 In the above bash command remove `src-tauri/binaries` to avoid regenerating the python sidecars

@@ -5,16 +5,8 @@ import uuid
 import signal
 import uvicorn
 import requests
-from DB_Service_FireBaseAdmin import DBService
 import threading
 from pydantic import BaseModel
-from dotenv import load_dotenv
-
-# Load environment variables from .env file (use absolute path for PyInstaller compatibility)
-env_path = os.path.join(os.path.dirname(__file__), '.env')
-load_dotenv(dotenv_path=env_path)
-print(f"[DEBUG] Loading .env from: {env_path}")
-print(f"[DEBUG] .env file exists: {os.path.exists(env_path)}")
 from typing import Optional, List
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Body
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,6 +21,7 @@ from telethon.tl.functions.channels import CreateChannelRequest, EditAdminReques
 from configHandler import config_ini
 from pathlib import Path
 from contextlib import asynccontextmanager
+from DB_Service_FireBaseAdmin import DBService
 
 
 BOT_NAME = 'QuantCopierAlertsBot'
@@ -124,6 +117,17 @@ class UpdateSymbolRequest(BaseModel):
     new_source_symbol: str
     new_broker_symbol: str
 
+class DiscordTokenInput(BaseModel):
+    token: str
+
+class DiscordChannel(BaseModel):
+    id: str
+    name: str
+
+class DiscordChannelSave(BaseModel):
+    channel_id: str
+    channel_name: Optional[str] = None
+
 class DownloadUpdateRequest(BaseModel):
     install_dir: Optional[str] = None
     restart_exe: Optional[str] = None
@@ -131,17 +135,7 @@ class DownloadUpdateRequest(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {"Welcome" : "@QuantCopier TeleGram API Tools"}
-
-@app.get("/api/version")
-def get_version():
-    """
-    Return the current version of QuantCopier.
-    Delegates to get_ui_version() which checks, in order:
-      QUANTCOPIER_INSTALL_DIR env var → sys._MEIPASS bundle →
-      install dir heuristic → dev layout paths → hardcoded fallback.
-    """
-    return {"version": get_ui_version()}
+    return {"Welcome": "@QuantCopier Discord API Tools"}
 
 sessions = {}
 
@@ -327,69 +321,49 @@ async def reset_auth():
     return JSONResponse(content={"message": "auth reset"}, status_code=200)
 
 
-async def _get_user_info_internal():
-    """
-    Helper function to retrieve Telegram user info.
-    Returns a dict with user data or raises an exception.
-    """
-    global TELEGRAM_CLIENT
-    try:
-        config_gen = config_ini()
-        config_data = config_gen.get_details_from_config()
-        
-        # Use global client if available
-        if TELEGRAM_CLIENT and TELEGRAM_CLIENT.is_connected() and await TELEGRAM_CLIENT.is_user_authorized():
-            client = TELEGRAM_CLIENT
-        else:
-            client = TelegramClient(StringSession(config_data['session_string_key']), TELEGRAM_API_ID, TELEGRAM_API_HASH)
-            await client.connect()
-        
-        if not await client.is_user_authorized():
-            raise Exception("User not authorized")
-        
-        me = await client.get_me()
-        profile_pic_path = 'static/TG_UserProfilePic.jpg'
-        
-        # On first startup (or if file doesn't exist), download fresh profile photo
-        if not os.path.exists(profile_pic_path):
-            try:
-                await client.download_profile_photo('me', file=profile_pic_path, download_big=True)
-            except:
-                pass  # If profile photo download fails, continue without it
-        
-        # Set URL if file exists, None otherwise
-        profile_photo_url = "/static/TG_UserProfilePic.jpg" if os.path.exists(profile_pic_path) else None
-        
-        # Format phone number with + prefix
-        formatted_phone = f"+{me.phone}" if me.phone and not me.phone.startswith('+') else me.phone
-        
-        return {
-            "username": me.username,
-            "lastName": me.last_name,
-            "firstName": me.first_name,
-            "phoneNumber": formatted_phone,
-            "profilePhotoUrl": profile_photo_url
-        }
-    except Exception as e:
-        print(f"ERROR in _get_user_info_internal: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise
-
-
 @app.get("/get_user_info")
 async def get_user_info():
     """
     Validates Telegram credentials and returns user info, including a profile photo URL.
     Downloads fresh profile photo on first startup, then reuses existing photo for subsequent calls.
     """
+    global TELEGRAM_CLIENT
+    config_gen = config_ini()
+    config_data = config_gen.get_details_from_config()
+    
+    # Use global client if available
+    if TELEGRAM_CLIENT and TELEGRAM_CLIENT.is_connected() and await TELEGRAM_CLIENT.is_user_authorized():
+        client = TELEGRAM_CLIENT
+    else:
+        client = TelegramClient(StringSession(config_data['session_string_key']), TELEGRAM_API_ID, TELEGRAM_API_HASH)
+        await client.connect()
+        
     try:
-        user_data = await _get_user_info_internal()
-        return JSONResponse(content=user_data, status_code=200)
+        if await client.is_user_authorized():
+            me = await client.get_me()
+            profile_pic_path = 'static/TG_UserProfilePic.jpg'
+            
+            # On first startup (or if file doesn't exist), download fresh profile photo
+            if not hasattr(get_user_info, 'initialized') or not os.path.exists(profile_pic_path):
+                if os.path.exists(profile_pic_path):
+                    os.remove(profile_pic_path)
+                await client.download_profile_photo('me', file=profile_pic_path, download_big=True)
+                get_user_info.initialized = True
+
+            # Set URL if file exists, None otherwise
+            profile_photo_url = "/static/TG_UserProfilePic.jpg" if os.path.exists(profile_pic_path) else None
+
+            return JSONResponse(content={
+                "username": me.username,
+                "lastName": me.last_name,
+                "firstName": me.first_name,
+                "phoneNumber": me.phone,
+                "profilePhotoUrl": profile_photo_url
+            }, status_code=200)
+        else:
+            return JSONResponse(content={"status": "failed", "message": "The provided credentials are invalid."}, status_code=403)
     except RPCError as e:
         return JSONResponse(content={"status": "failed", "message": f"An error occurred: {str(e)}"}, status_code=403)
-    except Exception as e:
-        return JSONResponse(content={"status": "failed", "message": f"An error occurred: {str(e)}"}, status_code=500)
 
 @app.get("/validate_user")
 async def validate_user():
@@ -403,7 +377,14 @@ async def validate_user():
         or error message if validation fails.
     """    
     try:
-        user_data = await _get_user_info_internal()
+        user_info_response = await get_user_info()
+        if user_info_response.status_code != 200:
+            return JSONResponse(
+                content={"status": "failed", "message": "Failed to get Telegram user info"},
+                status_code=401
+            )
+
+        user_data = json.loads(user_info_response.body.decode())
         phone_number = user_data.get("phoneNumber", "")
         formatted_phone = f"+{phone_number}" if not phone_number.startswith('+') else phone_number
 
@@ -432,15 +413,46 @@ async def validate_user():
             )
             
     except Exception as e:
-        error_msg = f"An error occurred during telegram user validation: {str(e)}"
-        print(f"ERROR in /validate_user: {error_msg}")
-        import traceback
-        traceback.print_exc()
         return JSONResponse(
-            content={"status": "failed", "message": error_msg},
+            content={"status": "failed", "message": f"An error occurred during telegram user validation: {str(e)}"},
             status_code=500
         )
     
+
+@app.get("/check_bot_in_channel")
+async def check_bot_in_channel():
+    """
+    This endpoint checks if the bot is a member or an admin of a given Telegram channel.
+    It takes a CheckChannelSubscribers object as input which includes `api_id`, `api_hash`, `session_string_key`, and `channel_id`.
+    It returns a JSON response with a success message if the bot is a member or an admin of the channel, or an error message if it is not.
+    """
+    config_gen = config_ini()
+    config_data = config_gen.get_details_from_config()
+    client = TelegramClient(StringSession(config_data['session_string_key']), TELEGRAM_API_ID, TELEGRAM_API_HASH)
+    await client.connect()
+    channel = await client.get_entity(InputPeerChannel(int(config_data['alerts_channel_id']), 0))
+    participants = await client(GetParticipantsRequest(channel, ChannelParticipantsAdmins(), 0, 10, 0))
+    for user in participants.users:
+        if user.username == BOT_NAME:
+            return {
+                "status": "success",
+                "message": f"Bot '{BOT_NAME}' is an admin in the channel '{channel.title}'.",
+                "channel_id": str(config_data['alerts_channel_id'])  # Include channel_id
+            }
+    participants = await client.get_participants(channel)
+    for user in participants:
+        if user.username == BOT_NAME:
+            return {
+                "status": "success",
+                "message": f"Bot '{BOT_NAME}' is a member in the channel '{channel.title}'.",
+                "channel_id": str(config_data['alerts_channel_id'])  # Include channel_id
+            }
+    return {
+        "status": "failed",
+        "message": f"Bot '{BOT_NAME}' is neither a member nor an admin in the channel '{channel.title}'.",
+        "channel_id": str(config_data['alerts_channel_id'])  # Include channel_id even on failure
+    } 
+
 
 @app.get("/create_channel_and_add_bot")
 async def create_channel_and_add_bot():
@@ -489,104 +501,6 @@ async def create_channel_and_add_bot():
     except:
         return JSONResponse(content={"status": "Failed to create channel"}, status_code=200)
             
-
-@app.get("/get_channels")
-async def get_channels():
-    """
-    This endpoint allows you to get a list of Telegram channels. It takes a ChannelFilter object as input 
-    which includes `api_id`, `api_hash`, `session_string_key`, and an optional `is_creator` flag.
-    It returns a JSON response with a dictionary of channel IDs and their corresponding names,
-    excluding channels with the name specified in ALERTS_CHANNEL_NAME.
-    """
-    global TELEGRAM_CLIENT
-    try:
-        confile_file = config_ini()
-        config_data = confile_file.get_details_from_config()
-        
-        # Use global client if available
-        if TELEGRAM_CLIENT and TELEGRAM_CLIENT.is_connected() and await TELEGRAM_CLIENT.is_user_authorized():
-            client = TELEGRAM_CLIENT
-        else:
-            client = TelegramClient(StringSession(config_data['session_string_key']), TELEGRAM_API_ID, TELEGRAM_API_HASH)
-            await client.connect()
-            
-        channels_dict = {}
-        async for dialog in client.iter_dialogs():
-            if isinstance(dialog.entity, Channel):
-                # Skip channels with the title matching ALERTS_CHANNEL_NAME
-                if dialog.entity.title == ALERTS_CHANNEL_NAME:
-                    continue
-                if config_data['is_creator']:
-                    if dialog.entity.creator and dialog.entity.megagroup:
-                        channels_dict[dialog.entity.id] = dialog.entity.title
-                else:
-                    channels_dict[dialog.entity.id] = dialog.entity.title
-        return JSONResponse(content={"message": "Successfully Created", "data": channels_dict}, status_code=200)
-    except errors.AuthKeyUnregisteredError as e:
-        return JSONResponse(content={"message": "Auth Error"}, status_code=401)
-    except Exception as e:
-        return JSONResponse(content={"message": f"Failed to fetch channels: {str(e)}"}, status_code=500) 
-        
-         
-@app.get("/get_selected_channels")
-async def get_selected_channels():
-    config_gen = config_ini()
-    config_gen.config.read(config_gen.file_path)
-    try:
-        source_ids = json.loads(config_gen.get_config_value('TELEGRAM', 'source_channel_ids') or '[]')
-        source_names = json.loads(config_gen.get_config_value('TELEGRAM', 'source_channel_names') or '[]')
-        selected_channels = dict(zip(source_ids, source_names))
-        return JSONResponse(content={"message": "Selected channels retrieved", "data": selected_channels}, status_code=200)
-    except json.JSONDecodeError:
-        return JSONResponse(content={"message": "Error reading stored channels"}, status_code=500)
-    
-@app.post('/save_channels')
-async def save_channels(channel_data:List[Channel_Data]):
-    """
-    This endpoint allows you to save a list of Telegram channels. It takes a list of Channel_Data objects as input.
-    It returns a JSON response with a success message and the status of the operation.
-    """
-    config_gen=config_ini()
-    return_code=config_gen.add_channel_id_data(channel_data=channel_data)
-    if(return_code==True):
-        
-        return JSONResponse(content={"message": "Successfully Created","Status":"Success"}, status_code=200)
-    else:
-        return JSONResponse(content={"message": "Failed","Status":"Failed"}, status_code=200)
-
-@app.get("/check_bot_in_channel")
-async def check_bot_in_channel():
-    """
-    This endpoint checks if the bot is a member or an admin of a given Telegram channel.
-    It takes a CheckChannelSubscribers object as input which includes `api_id`, `api_hash`, `session_string_key`, and `channel_id`.
-    It returns a JSON response with a success message if the bot is a member or an admin of the channel, or an error message if it is not.
-    """
-    config_gen = config_ini()
-    config_data = config_gen.get_details_from_config()
-    client = TelegramClient(StringSession(config_data['session_string_key']), TELEGRAM_API_ID, TELEGRAM_API_HASH)
-    await client.connect()
-    channel = await client.get_entity(InputPeerChannel(int(config_data['alerts_channel_id']), 0))
-    participants = await client(GetParticipantsRequest(channel, ChannelParticipantsAdmins(), 0, 10, 0))
-    for user in participants.users:
-        if user.username == BOT_NAME:
-            return {
-                "status": "success",
-                "message": f"Bot '{BOT_NAME}' is an admin in the channel '{channel.title}'.",
-                "channel_id": str(config_data['alerts_channel_id'])  # Include channel_id
-            }
-    participants = await client.get_participants(channel)
-    for user in participants:
-        if user.username == BOT_NAME:
-            return {
-                "status": "success",
-                "message": f"Bot '{BOT_NAME}' is a member in the channel '{channel.title}'.",
-                "channel_id": str(config_data['alerts_channel_id'])  # Include channel_id
-            }
-    return {
-        "status": "failed",
-        "message": f"Bot '{BOT_NAME}' is neither a member nor an admin in the channel '{channel.title}'.",
-        "channel_id": str(config_data['alerts_channel_id'])  # Include channel_id even on failure
-    }        
 
 
 #region MT5 related APIs
@@ -890,17 +804,213 @@ async def save_operational_settings(settings: dict):
         )
 #endregion
 
+@app.post("/discord/token")
+async def save_discord_token(token_data: DiscordTokenInput):
+    """
+    Save Discord token to config.ini without validation
+    """
+    try:
+        # Save token to config
+        config_gen = config_ini()
+        config_gen.update_config('DISCORD', 'discord_token', token_data.token)
+        
+        return JSONResponse(
+            content={
+                "status": "success", 
+                "message": "Discord token saved successfully"
+            },
+            status_code=200
+        )
+    except Exception as e:
+        return JSONResponse(
+            content={
+                "status": "failed", 
+                "message": f"Error saving Discord token: {str(e)}"
+            },
+            status_code=500
+        )
+
+@app.get("/discord/channels")
+async def get_discord_channels():
+    """
+    Get list of saved Discord channels from config.ini
+    """
+    try:
+        config_gen = config_ini()
+        
+        # Get token using the new function
+        token = get_discord_token()
+        if not token:
+            return JSONResponse(
+                content={
+                    "status": "failed",
+                    "message": "Discord token not found"
+                },
+                status_code=400
+            )
+        
+        # Rest of the function remains the same...
+        channel_ids = json.loads(config_gen.get_config_value('DISCORD', 'source_channel_ids') or '[]')
+        channel_names = json.loads(config_gen.get_config_value('DISCORD', 'source_channel_names') or '[]')
+        
+        channels_dict = {}
+        for i, channel_id in enumerate(channel_ids):
+            channel_name = channel_names[i] if i < len(channel_names) else f"Channel {channel_id}"
+            channels_dict[channel_id] = channel_name
+
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "Successfully fetched channels",
+                "data": channels_dict
+            },
+            status_code=200
+        )
+    except Exception as e:
+        return JSONResponse(
+            content={
+                "status": "failed",
+                "message": f"Error fetching Discord channels: {str(e)}"
+            },
+            status_code=500
+        )
+
+@app.post("/discord/channels/save")
+async def save_discord_channel(channel_data: DiscordChannelSave):
+    """
+    Save or update Discord channel information in config.ini
+    """
+    try:
+        config_gen = config_ini()
+        
+        # Get existing channel IDs and names
+        channel_ids = json.loads(config_gen.get_config_value('DISCORD', 'source_channel_ids') or '[]')
+        channel_names = json.loads(config_gen.get_config_value('DISCORD', 'source_channel_names') or '[]')
+        
+        # Check if channel ID already exists
+        if channel_data.channel_id in channel_ids:
+            # Update existing channel
+            index = channel_ids.index(channel_data.channel_id)
+            if channel_data.channel_name:
+                channel_names[index] = channel_data.channel_name
+        else:
+            # Add new channel
+            channel_ids.append(channel_data.channel_id)
+            channel_names.append(channel_data.channel_name or f"Channel {channel_data.channel_id}")
+        
+        # Save back to config
+        config_gen.update_config('DISCORD', 'source_channel_ids', json.dumps(channel_ids))
+        config_gen.update_config('DISCORD', 'source_channel_names', json.dumps(channel_names))
+        
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "Discord channel saved successfully"
+            },
+            status_code=200
+        )
+    except Exception as e:
+        return JSONResponse(
+            content={
+                "status": "failed",
+                "message": f"Error saving Discord channel: {str(e)}"
+            },
+            status_code=500
+        )
+
+@app.delete("/discord/channels/delete/{channel_id}")
+async def delete_discord_channel(channel_id: str):
+    """
+    Delete a Discord channel from config.ini
+    """
+    try:
+        config_gen = config_ini()
+        
+        # Get existing channel IDs and names
+        channel_ids = json.loads(config_gen.get_config_value('DISCORD', 'source_channel_ids') or '[]')
+        channel_names = json.loads(config_gen.get_config_value('DISCORD', 'source_channel_names') or '[]')
+        
+        # Check if channel exists
+        if channel_id not in channel_ids:
+            return JSONResponse(
+                content={
+                    "status": "failed",
+                    "message": "Channel not found"
+                },
+                status_code=404
+            )
+        
+        # Get index of channel to delete
+        index = channel_ids.index(channel_id)
+        
+        # Remove channel from both lists
+        channel_ids.pop(index)
+        if index < len(channel_names):  # Check if there's a corresponding name to delete
+            channel_names.pop(index)
+        
+        # Save updated lists back to config
+        config_gen.update_config('DISCORD', 'source_channel_ids', json.dumps(channel_ids))
+        config_gen.update_config('DISCORD', 'source_channel_names', json.dumps(channel_names))
+        
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "Discord channel deleted successfully"
+            },
+            status_code=200
+        )
+    except Exception as e:
+        return JSONResponse(
+            content={
+                "status": "failed",
+                "message": f"Error deleting Discord channel: {str(e)}"
+            },
+            status_code=500
+        )
+
+@app.get("/discord/token")
+async def get_discord_token_endpoint():
+    """
+    Retrieve the Discord token from config.ini
+    """
+    try:
+        token = get_discord_token()
+        if not token:
+            return JSONResponse(
+                content={
+                    "status": "failed",
+                    "message": "Discord token not found"
+                },
+                status_code=404
+            )
+        
+        return JSONResponse(
+            content={
+                "status": "success",
+                "discord_token": token
+            },
+            status_code=200
+        )
+    except Exception as e:
+        return JSONResponse(
+            content={
+                "status": "failed",
+                "message": f"Error retrieving Discord token: {str(e)}"
+            },
+            status_code=500
+        )
+
 # Programmatically force shutdown this sidecar.
 def kill_process():
     os.kill(os.getpid(), signal.SIGINT)  # This force closes this script.
 
-@app.post("/kill-telegram-copier")
-async def kill_telegram_copier():
-    """Kill any running QuantCopierTelegram.exe process and return command output"""
+@app.post("/kill-discord-copier")
+async def kill_discord_copier():
+    """Kill any running QuantCopierDiscord.exe process and return command output"""
     try:
         if sys.platform == 'win32':
             import subprocess
-            result = subprocess.run(['taskkill', '/F', '/IM', 'QuantCopierTelegram.exe'], 
+            result = subprocess.run(['taskkill', '/F', '/IM', 'QuantCopierDiscord.exe'], 
                                   capture_output=True, text=True)
             return JSONResponse(content={
                 "status": "success" if result.returncode == 0 else "error",
@@ -985,22 +1095,19 @@ def create_symbol_mapper_json():
         except Exception as e:
             print(f"Error creating symbol_mapper.json: {str(e)}")
 
-
 # ============================================================================
 # Auto-Update API Endpoints
 # ============================================================================
 
 def get_ui_version() -> str:
-    """
     Get the current UI version from the EXE properties or VERSION file.
 
     Priority order:
     1. Check file properties of the main GUI executable in the install directory.
-    2. QUANTCOPIER_INSTALL_DIR env var  — set by the PS updater after install.
-    3. QUANTCOPIER_SOURCE_DIR env var   — set in dev mode to point at the repo root.
-    4. sys._MEIPASS / VERSION           — bundled inside the frozen exe at build time.
-    5. resolve_install_dir() / VERSION  — heuristic for finding the real install root.
-    """
+    2. QUANTCOPIER_INSTALL_DIR env var  ΓÇö set by the PS updater after install.
+    3. QUANTCOPIER_SOURCE_DIR env var   ΓÇö set in dev mode to point at the repo root.
+    4. sys._MEIPASS / VERSION           ΓÇö bundled inside the frozen exe at build time.
+    5. resolve_install_dir() / VERSION  ΓÇö heuristic for finding the real install root.
     import sys
     from pathlib import Path
     from typing import Optional
@@ -1079,7 +1186,7 @@ def get_ui_version() -> str:
     except Exception as e:
         print(f"[DEBUG][get_ui_version] Heuristic properties lookup failed: {e}")
 
-    # 2. QUANTCOPIER_INSTALL_DIR env var — takes priority so the updated version
+    # 2. QUANTCOPIER_INSTALL_DIR env var ΓÇö takes priority so the updated version
     #    is shown immediately after the PS updater relaunches the app.
     env_dir = os.getenv("QUANTCOPIER_INSTALL_DIR", "").strip()
     if env_dir:
@@ -1087,7 +1194,7 @@ def get_ui_version() -> str:
         if v:
             return v
 
-    # 3. QUANTCOPIER_SOURCE_DIR — set this in .env or the shell when running in dev mode
+    # 3. QUANTCOPIER_SOURCE_DIR ΓÇö set this in .env or the shell when running in dev mode
     #    to point at the repo root (the directory that contains the VERSION file).
     src_dir = os.getenv("QUANTCOPIER_SOURCE_DIR", "").strip()
     if src_dir:
@@ -1095,7 +1202,7 @@ def get_ui_version() -> str:
         if v:
             return v
 
-    # 4. sys._MEIPASS — only present when running as a frozen PyInstaller binary.
+    # 4. sys._MEIPASS ΓÇö only present when running as a frozen PyInstaller binary.
     #    The VERSION file is bundled into the exe at build time (see QuantCopierAPI.spec).
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
@@ -1127,7 +1234,7 @@ def get_ui_version() -> str:
         if current == current.parent:  # filesystem root
             break
 
-    # 6. Same directory as this script — Backend/VERSION
+    # 6. Same directory as this script ΓÇö Backend/VERSION
     v = _try_read_version(Path(__file__).parent / "VERSION")
     if v:
         return v
@@ -1176,7 +1283,7 @@ def get_latest_release_from_github() -> Optional[dict]:
                             'published_at': release.get('published_at'),
                         }
 
-                # Release exists but has no .exe asset yet — still return version info
+                # Release exists but has no .exe asset yet ΓÇö still return version info
                 # so the UI can show an update is available even without a direct download
                 if tag_name:
                     print(f"[DEBUG][get_latest_release_from_github] No .exe asset found for {tag_name}, returning version only")
@@ -1429,10 +1536,18 @@ async def download_update(body: Optional[DownloadUpdateRequest] = Body(default=N
         )
 
 
+
+def get_discord_token():
+    """
+    Get Discord token from config.ini
+    """
+    config_gen = config_ini()
+    return config_gen.get_config_value('DISCORD', 'discord_token')
+
 if __name__ == "__main__":
     start_input_thread()
     initConfig()
     create_symbol_mapper_json()
-    uvicorn.run(app, host="127.0.0.1", port=8001, lifespan="on")
+    uvicorn.run(app, host="127.0.0.1", port=8000, lifespan="on")
     signal.signal(signal.SIGINT, lambda sig, frame: shutdown())
     signal.signal(signal.SIGTERM, lambda sig, frame: shutdown())

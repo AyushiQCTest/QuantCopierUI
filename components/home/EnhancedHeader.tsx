@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useContext } from "react";
+import { useState, useContext, useEffect } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Menu, UserCircle, Sun, Moon } from "lucide-react";
@@ -8,17 +8,23 @@ import ProfileDropdown from "@/components/home/ProfileDropdown";
 import { ThemeContext } from "@/lib/theme-config";
 import { useBackendData } from "@/src/context/BackendDataContext";
 
-
 export default function EnhancedHeader({ toggleSidebar }: { toggleSidebar?: () => void }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const { theme, toggleTheme } = useContext(ThemeContext);
-  const { userInfo } = useBackendData();
+  const { userInfo, isAuthenticated } = useBackendData();
   const [imageError, setImageError] = useState(false);
 
   // Derive the profile photo URL from context (if present)
   const profilePhotoUrl = userInfo?.profilePhotoUrl && !imageError
-    ? `http://localhost:8001${userInfo.profilePhotoUrl}`
+    ? `http://localhost:8000${userInfo.profilePhotoUrl}`
     : null;
+
+  // Reset image error when userInfo changes
+  useEffect(() => {
+    if (userInfo?.profilePhotoUrl) {
+      setImageError(false);
+    }
+  }, [userInfo]);
 
   const getThemeStyles = () => ({
     container: theme === "dark" ? "bg-black text-white" : "bg-white text-gray-900",
@@ -28,6 +34,13 @@ export default function EnhancedHeader({ toggleSidebar }: { toggleSidebar?: () =
   });
 
   const styles = getThemeStyles();
+
+  if (!userInfo && isAuthenticated) {
+    // Show a skeleton or spinner while loading user info
+    return (
+      <div className="w-10 h-10 rounded-full bg-gray-200 animate-pulse" />
+    );
+  }
 
   return (
     <header
@@ -60,11 +73,11 @@ export default function EnhancedHeader({ toggleSidebar }: { toggleSidebar?: () =
         {/* Center - Logo */}
         <div className="absolute left-1/2 transform -translate-x-1/2">
           <Image
-            src={theme === "dark" ? "/QCT_Logo_Dark.svg" : "/QCT_Logo_Light.svg"}
-            alt="QCT Logo"
-            width={720}
-            height={300}
-            className="h-40 w-auto"
+            src={theme === "dark" ? "/QCD_Logo_Dark.svg" : "/QCD_Logo_Light.svg"}
+            alt="QCD Logo"
+            width={150}
+            height={60}
+            priority
           />
         </div>
 
@@ -98,8 +111,12 @@ export default function EnhancedHeader({ toggleSidebar }: { toggleSidebar?: () =
                 width={48}
                 height={48}
                 className="w-full h-full object-cover"
-                onError={() => setImageError(true)}
+                onError={() => {
+                  console.error("Failed to load profile image:", profilePhotoUrl);
+                  setImageError(true);
+                }}
                 priority={true}
+                unoptimized={true}
               />
             ) : (
               <UserCircle className={`w-8 h-8 ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`} />

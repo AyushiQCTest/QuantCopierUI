@@ -9,7 +9,7 @@ import axios, { AxiosError } from "axios"; // Import AxiosError
 import { Loader2, Trash2, Pencil } from "lucide-react";
 import { ThemeContext } from "@/lib/theme-config";
 
-const API_BASE_URL = "http://localhost:8001";
+const API_BASE_URL = "http://localhost:8000";
 
 interface SymbolMapperProps {
   onBack?: () => void;
@@ -296,9 +296,15 @@ export default function SymbolMapper({ onBack, onNext, theme }: SymbolMapperProp
             />
           </div>
         </div>
-        <div className="flex justify-center">
+        <div className="flex justify-between items-center">
           <Button onClick={handleAddMapping} className={styles.buttonPrimary}>
             <span className="text-xl mr-2">+</span> Add Mapping
+          </Button>
+          <Button 
+            onClick={onNext} 
+            className={styles.buttonPrimary}
+          >
+            Save
           </Button>
         </div>
       </div>

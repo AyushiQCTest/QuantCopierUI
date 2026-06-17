@@ -34,7 +34,7 @@ interface Step1MT5Props {
   isRevisit: boolean;
 }
 
-const API_BASE_URL = "http://localhost:8001";
+const API_BASE_URL = "http://localhost:8000";
 
 export default function Step1MT5({ onNext, onBack, theme, isRevisit }: Step1MT5Props) {
   const { toast } = useToast();
@@ -179,9 +179,9 @@ export default function Step1MT5({ onNext, onBack, theme, isRevisit }: Step1MT5P
             
             const licensesArray: License[] = Object.keys(validLicenseInfo)
               .filter(licenseKey => {
-                // Filter by product type - only include QuantCopier Telegram products
+                // Filter by product type - only include QuantCopier products
                 const details = validLicenseInfo[licenseKey];
-                return details.productType && details.productType.startsWith("QuantCopierMT5Telegram");
+                return details.productType && details.productType.startsWith("QuantCopierMT5Discord");
               })
               .map((licenseKey) => {
                 const details = validLicenseInfo[licenseKey];
@@ -451,7 +451,7 @@ export default function Step1MT5({ onNext, onBack, theme, isRevisit }: Step1MT5P
           MT5 Configuration
         </h2>
         <p className={styles.textSecondary}>
-          Link your MT5 account to your subscription. Manage your MT5 accounts in the <a href="https://quanttradertools.vercel.app/login" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600">Client Dashboard</a>
+        Link your MT5 account to your subscription. Manage your MT5 accounts in the <a href="https://quanttradertools.vercel.app/login" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600">Client Dashboard</a>
         </p>
       </div>
 

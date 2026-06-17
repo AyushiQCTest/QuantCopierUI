@@ -6,14 +6,12 @@ import { useContext, useState, useEffect } from "react";
 import { ThemeContext } from "@/lib/theme-config";
 import { Tooltip } from "@/components/ui/tooltip";
 import React from "react";
-import { TelegramIcon } from "@/components/TelegramIcon";
+import { FaDiscord } from "react-icons/fa";
 import { useBackendData } from "@/src/context/BackendDataContext";
 import { useToast } from "@/hooks/use-toast";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ToastAction } from "@/components/ui/toast";
-import { Info } from "lucide-react";
-import { AboutModal } from "@/components/about-modal";
 
 interface SidebarProps {
   expanded: boolean;
@@ -21,11 +19,12 @@ interface SidebarProps {
   currentStep?: string | null;
 }
 
-/** Closes any existing QuantCopierTelegram processes*/
-async function closeQuantCopierTelegram() {
+
+/*Closes any existing QuantCopierDiscord processes*/
+async function closeQuantCopierDiscord() {
   try {
     console.log("Closing existing QuantCopierDiscord");
-    const response = await fetch('http://127.0.0.1:8001/kill-telegram-copier', {
+    const response = await fetch('http://127.0.0.1:8000/kill-discord-copier', {
       method: 'POST',
     });
     const data = await response.json();
@@ -39,10 +38,11 @@ async function closeQuantCopierTelegram() {
       console.error('Failed to kill process:', data.message || 'Unknown error');
     }
   } catch (err) {
-    console.error('Error while trying to close QuantCopierTelegram:', err);
+    console.error('Error while trying to close QuantCopierDiscord:', err);
   }
   // We don't throw here since this is a cleanup operation
 }
+
 
 
 export default function Sidebar({ expanded, onClose, currentStep }: SidebarProps) {
@@ -50,8 +50,8 @@ export default function Sidebar({ expanded, onClose, currentStep }: SidebarProps
   const { toast, dismiss } = useToast();
   const { theme } = useContext(ThemeContext);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
-  const [aboutOpen, setAboutOpen] = useState(false);
   const { operationalSettings, fetchOperationalSettings } = useBackendData();
+
 
   // Load operational settings when component mounts
   useEffect(() => {
@@ -88,13 +88,38 @@ export default function Sidebar({ expanded, onClose, currentStep }: SidebarProps
       step: "mt5-setup",
     },
     {
+      label: "Discord Token",
+      icon: (
+        <FaDiscord
+          className={`w-6 h-6 ${currentStep === "discord-token" || hoveredItem === "discord-token"
+            ? theme === "dark"
+              ? "text-white"
+              : "text-blue-600"
+            : theme === "dark"
+              ? "text-gray-400"
+              : "text-gray-500"
+            }`}
+        />
+      ),
+      step: "discord-token",
+    },
+    {
       label: "Select Channels",
       icon: (
-        <TelegramIcon
-          theme={theme}
+        <Image
+          src={"/OmniChannel.svg"}
+          alt="Channels"
           width={24}
           height={24}
           className="w-6 h-6"
+          style={{
+            filter:
+              currentStep === "channel-select" || hoveredItem === "channel-select"
+                ? "none"
+                : theme === "dark"
+                  ? "grayscale(100%) brightness(200%)"
+                  : "grayscale(100%) contrast(150%) brightness(50%)",
+          }}
         />
       ),
       step: "channel-select",
@@ -110,15 +135,15 @@ export default function Sidebar({ expanded, onClose, currentStep }: SidebarProps
           className="w-6 h-6"
           style={{
             filter:
-              currentStep === "add-bot" || hoveredItem === "add-bot"
-                ? "none" // Alert2.svg stays yellow when selected/hovered
+              currentStep === "notification-setup" || hoveredItem === "notification-setup"
+                ? "none"
                 : theme === "dark"
-                  ? "grayscale(100%) brightness(200%)" // Whiter in dark mode
-                  : "grayscale(100%) contrast(150%) brightness(50%)", // Darker grey in light mode
+                  ? "grayscale(100%) brightness(200%)"
+                  : "grayscale(100%) contrast(150%) brightness(50%)",
           }}
         />
       ),
-      step: "add-bot",
+      step: "notification-setup",
     },
     {
       label: "Operational Settings",
@@ -145,14 +170,15 @@ export default function Sidebar({ expanded, onClose, currentStep }: SidebarProps
           style={{
             filter:
               currentStep === "symbol-mapper" || hoveredItem === "symbol-mapper"
-                ? "none" // SymbolMapper3.svg in full color
+                ? "none"
                 : theme === "dark"
-                  ? "grayscale(100%) brightness(200%)" // Whiter in dark mode
-                  : "grayscale(100%) contrast(150%) brightness(50%)", // Darker grey in light mode
+                  ? "grayscale(100%) brightness(200%)"
+                  : "grayscale(100%) contrast(150%) brightness(50%)",
           }}
         />
       ),
       step: "symbol-mapper",
+      route: "/onboarding?step=symbol-mapper"
     },
   ];
 
@@ -187,15 +213,21 @@ export default function Sidebar({ expanded, onClose, currentStep }: SidebarProps
         currentStep === null || currentStep === "home" || hoveredItem === "home";
       return isActive ? { filter: "none" } : { filter: "grayscale(100%)" };
     }
+
+    // Skip style application for discord icons
+    if (step === "channel-select" || step === "discord-token") {
+      return {};
+    }
+
     // Existing logic for other items:
     const isActive = currentStep === step || hoveredItem === step;
     const defaultStyle = { filter: "grayscale(100%)" };
     const activeStyle = { filter: "none" };
 
-    if (step === "settings" || step === "channel-select" || step === "mt5-setup") {
+    if (step === "settings" || step === "mt5-setup") {
       return isActive ? activeStyle : defaultStyle;
-    } else if (step === "add-bot" || step === "symbol-mapper") {
-      return {}; // Icon styles applied directly in the icon prop.
+    } else if (step === "notification-setup" || step === "symbol-mapper") {
+      return {}; // Icon styles applied directly in the icon prop
     } else if (step === "launch") {
       return isActive ? { filter: "none" } : { filter: "grayscale(100%)" };
     }
@@ -203,20 +235,23 @@ export default function Sidebar({ expanded, onClose, currentStep }: SidebarProps
   };
 
   const renderIcon = (icon: JSX.Element, step: string | null) => {
+    if (step === "channel-select" || step === "discord-token") {
+      return icon; // Return discord icons as is since styles are handled via className
+    }
     const styles = getIconStyles(step);
-    if (step === "add-bot" || step === "symbol-mapper") {
-      return icon; // Styles are applied directly in the icon
+    if (step === "notification-setup" || step === "symbol-mapper") {
+      return icon;
     }
     return React.cloneElement(icon, { style: styles });
   };
 
   return (
     <div
-      className={`fixed left-0 h-[calc(100vh-88px)] top-[88px] ${expanded ? "w-64" : "w-16"
+      className={`fixed left-0 h-[calc(100vh-88px)] top-[88px] hidden md:block ${expanded ? "w-64" : "w-16"
         } ${styles.container} border-r p-0 z-50 transition-all duration-300 ${expanded ? "overlay" : ""
         }`}
     >
-      <ul className="flex flex-col h-full p-4 space-y-4">
+      <ul className="space-y-4 p-4">
         {/* Home Item */}
         <li className="flex items-center h-10 relative">
           <Tooltip content={!expanded ? homeItem.label : null}>
@@ -269,7 +304,7 @@ export default function Sidebar({ expanded, onClose, currentStep }: SidebarProps
                     if (item.step === "settings") {
                       await fetchOperationalSettings({ force: true });
                     }
-                    router.push(`/onboarding?step=${item.step}`);
+                    router.push(item.route || `/onboarding?step=${item.step}`);
                     onClose();
                   }}
                   onMouseEnter={() => setHoveredItem(item.step)}
@@ -307,11 +342,11 @@ export default function Sidebar({ expanded, onClose, currentStep }: SidebarProps
                 onClick={async () => {
                   try {
                     // 1. Close existing instances
-                    await closeQuantCopierTelegram();
+                    await closeQuantCopierDiscord();
 
                     // 2. Show launching toast
                     const { id: launchToastId } = toast({
-                      title: "Launching QuantCopierTelegram...",
+                      title: "Launching QuantCopierDiscord...",
                       description: "Please wait while we start the background process.",
                       duration: 10000,
                     });
@@ -319,13 +354,13 @@ export default function Sidebar({ expanded, onClose, currentStep }: SidebarProps
                     await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second
 
                     // 3. Launch detached process
-                    await invoke('launch_telegram_detached');
+                    await invoke('launch_discord_detached');
 
                     // 4. Wait 3 seconds for it to stabilize
                     await new Promise(resolve => setTimeout(resolve, 3000));
 
                     // 5. Check if running
-                    const isRunning = await invoke<boolean>('check_telegram_process');
+                    const isRunning = await invoke<boolean>('check_discord_process');
 
                     // Dismiss the launching toast
                     dismiss(launchToastId);
@@ -333,7 +368,7 @@ export default function Sidebar({ expanded, onClose, currentStep }: SidebarProps
                     if (isRunning) {
                       toast({
                         title: "Launch Successful ✅",
-                        description: "QuantCopierTelegram.exe - Launched Successfully. Close UI window to conserve system resources",
+                        description: "QuantCopierDiscord.exe - Launched Successfully. Close UI window to conserve system resources",
                         className: "bg-green-500 text-white border-green-600",
                         duration: 60000, // Close automatically after 1 minute
                         action: (
@@ -381,39 +416,7 @@ export default function Sidebar({ expanded, onClose, currentStep }: SidebarProps
             </div>
           </Tooltip>
         </li>
-
-        {/* Divider before Info */}
-        <li className="py-2 mt-auto">
-          <hr className={`border-t-2 opacity-50 ${styles.divider}`} />
-        </li>
-
-        {/* Info Item */}
-        <li className="flex items-center h-10 relative">
-          <Tooltip content={!expanded ? "About & Updates" : null}>
-            <div className="w-full h-full relative">
-              <button
-                className={`flex items-center gap-4 w-full h-full rounded-lg ${styles.text
-                  } ${!expanded ? "justify-center" : ""} hover:bg-gray-700/50 relative z-10`}
-                onClick={() => setAboutOpen(true)}
-                onMouseEnter={() => setHoveredItem("info")}
-                onMouseLeave={() => setHoveredItem(null)}
-                title="About QuantCopier (Info & Updates)"
-                aria-label="Open info and updates"
-              >
-                <div
-                  className={`flex items-center justify-center w-6 h-6 ${expanded ? "ml-2" : ""}`}
-                >
-                  <Info className="w-6 h-6" />
-                </div>
-                {expanded && <span>About & Updates</span>}
-              </button>
-            </div>
-          </Tooltip>
-        </li>
       </ul>
-
-      {/* About Modal */}
-      <AboutModal isOpen={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
   );
 }

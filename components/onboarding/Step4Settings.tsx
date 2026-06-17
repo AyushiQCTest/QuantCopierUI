@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
+import { Slider } from "@/components/ui/slider"; // No need to import SliderProps separately
 import { Input } from "@/components/ui/input";
 import axios from "axios";
 import { ThemeContext } from "@/lib/theme-config";
@@ -17,7 +17,7 @@ interface Step4SettingsProps {
   isRevisit: boolean;
 }
 
-const API_BASE_URL = "http://localhost:8001";
+const API_BASE_URL = "http://localhost:8000";
 
 export default function Step4Settings({ onBack, onNext, theme, isRevisit }: Step4SettingsProps) {
   const [settings, setSettings] = useState({
@@ -38,8 +38,14 @@ export default function Step4Settings({ onBack, onNext, theme, isRevisit }: Step
   // Use operational settings from context
   const { operationalSettings, fetchOperationalSettings } = useBackendData();
 
+  // Always fetch the latest settings when component mounts
+  useEffect(() => {
+    fetchOperationalSettings();
+  }, [fetchOperationalSettings]);
+
   useEffect(() => {
     if (operationalSettings) {
+      console.log("Updating settings from context:", operationalSettings);
       setSettings({
         entry_price_variation_flag: operationalSettings.entry_price_variation_flag,
         risk_variation_flag: operationalSettings.risk_variation_flag,
@@ -56,15 +62,24 @@ export default function Step4Settings({ onBack, onNext, theme, isRevisit }: Step
 
   const handleSave = async () => {
     try {
+      console.log("Saving settings:", settings);
       await axios.post(`${API_BASE_URL}/save_operational_settings`, settings);
+      console.log("Settings saved to backend.");
+
+      // After saving to backend, force refresh the context data and wait for it
+      // Assuming fetchOperationalSettings accepts a { force: true } argument
+      await fetchOperationalSettings({ force: true });
+      console.log("Context data force refreshed.");
+
       if (!isRevisit) {
         await axios.post(`${API_BASE_URL}/set_onboarding_complete`);
+        console.log("Onboarding marked complete.");
       }
 
-      // Force refresh operational settings in the context
-      await fetchOperationalSettings({ force: true });
-
+      // Only call onNext *after* the context refresh is awaited
       onNext();
+      console.log("Navigated to next step/completed save.");
+
     } catch (error) {
       console.error("Error saving settings:", error);
     }
@@ -125,7 +140,9 @@ export default function Step4Settings({ onBack, onNext, theme, isRevisit }: Step
           />
         </div>
         <div className="flex items-center justify-between">
-          <Label className={styles.container}>Close Opposite Positions (Symbolwise)</Label>
+          <Label className={styles.container}>
+            Close Opposite Positions (Symbolwise)
+          </Label>
           <Switch
             checked={settings.close_opposite_positions_symbolwise}
             onCheckedChange={(checked) =>
@@ -141,20 +158,6 @@ export default function Step4Settings({ onBack, onNext, theme, isRevisit }: Step
               setSettings({ ...settings, console_log_output: checked })
             }
           />
-        </div>
-        <div className="space-y-2">
-          <Label className={styles.container}>Force Execute Market Orders (Symbols)</Label>
-          <Input
-            value={settings.force_execute_market_orders}
-            onChange={(e) =>
-              setSettings({ ...settings, force_execute_market_orders: e.target.value })
-            }
-            placeholder="e.g. XAUUSD+,XAGUSD"
-            className={activeTheme === "dark" ? "bg-gray-800 border-gray-700 text-white" : ""}
-          />
-          <p className={`text-xs ${styles.textSecondary}`}>
-            Comma-separated list of symbols to always execute as market orders.
-          </p>
         </div>
       </div>
 
@@ -260,6 +263,21 @@ export default function Step4Settings({ onBack, onNext, theme, isRevisit }: Step
             step={5}
           />
         </div>
+
+        <div className="space-y-2">
+          <Label className={styles.container}>Force Execute Market Orders (Symbols)</Label>
+          <Input
+            value={settings.force_execute_market_orders}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setSettings({ ...settings, force_execute_market_orders: e.target.value })
+            }
+            placeholder="e.g. XAUUSD+,XAGUSD"
+            className={activeTheme === "dark" ? "bg-gray-800 border-gray-700 text-white" : ""}
+          />
+          <p className={`text-xs ${styles.textSecondary}`}>
+            Comma-separated list of symbols to always execute as market orders.
+          </p>
+        </div>
       </div>
 
       <div className={isRevisit ? "flex justify-center" : "flex justify-between"}>
@@ -278,6 +296,6 @@ export default function Step4Settings({ onBack, onNext, theme, isRevisit }: Step
           </>
         )}
       </div>
-    </div >
+    </div>
   );
 }

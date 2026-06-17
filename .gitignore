@@ -24,11 +24,9 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
 # local env files
 .env*.local
-
-.env
-
 
 # vercel
 .vercel
@@ -36,6 +34,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+package-lock.json
 
 # Backend Python
 Backend/__pycache__/
@@ -49,6 +48,7 @@ Backend/symbol_mapper.json
 .DS_Store
 *.jpg
 *.png
+
 
 # tauri related
 config.ini
@@ -65,9 +65,5 @@ src-tauri/*.env
 src-tauri/signals.json
 src-tauri/symbol_mapper.json
 Backend/.env
-
-Backend/.env.bak
-
-Backend/firebase-credentials.json
 Backend/firebase_service_account_key.json
-
+Backend/firebase-credentials.json

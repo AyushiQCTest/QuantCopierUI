@@ -33,7 +33,7 @@ const releaseBody = `## Features
 
 - Multi-account signal synchronization with real-time updates
 - Advanced risk management with dynamic lot sizing
-- Telegram webhook improvements for faster notifications
+- Discord webhook improvements for faster notifications
 - Support for multiple MT5 instances on single machine
 
 ## Bug Fixes

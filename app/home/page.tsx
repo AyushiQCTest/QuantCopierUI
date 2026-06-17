@@ -8,7 +8,7 @@ import { ThemeContext } from "@/lib/theme-config";
 export default function HomePage() {
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const { theme } = useContext(ThemeContext);
-  
+ 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const reloaded = localStorage.getItem("homePageReloaded");
@@ -18,7 +18,7 @@ export default function HomePage() {
       }
     }
   }, []);
-  
+ 
   return (
     <div className={`min-h-screen ${
       theme === 'dark' 

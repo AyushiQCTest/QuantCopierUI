@@ -18,7 +18,7 @@ interface Step3NotificationSetupProps {
   theme?: string;
 }
 
-const API_BASE_URL = "http://localhost:8001";
+const API_BASE_URL = "http://localhost:8000";
 
 export default function Step3NotificationSetup({ onNext, onBack, theme }: Step3NotificationSetupProps) {
   const { toast } = useToast();
@@ -53,7 +53,6 @@ export default function Step3NotificationSetup({ onNext, onBack, theme }: Step3N
       toast({
         title: "Success",
         description: "Channel created and bot added successfully",
-        duration: 1500,
       });
 
       const botCheck = await axios.get(`${API_BASE_URL}/check_bot_in_channel`);
@@ -74,7 +73,6 @@ export default function Step3NotificationSetup({ onNext, onBack, theme }: Step3N
           title: "Warning",
           description: "Bot is not properly configured in the channel",
           variant: "destructive",
-          duration: 3000,
         });
       }
     } catch (error) {
@@ -82,7 +80,6 @@ export default function Step3NotificationSetup({ onNext, onBack, theme }: Step3N
         title: "Error",
         description: "Failed to create channel",
         variant: "destructive",
-        duration: 3000,
       });
     } finally {
       setCreatingChannel(false);
@@ -111,7 +108,6 @@ export default function Step3NotificationSetup({ onNext, onBack, theme }: Step3N
       title: "Consent Required",
       description: "You must agree to proceed with notifications setup.",
       variant: "destructive",
-      duration: 3000,
     });
   };
 

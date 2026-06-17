@@ -34,13 +34,16 @@ class config_ini:
             "onboarding_complete": "False",
             "entry_price_variation_flag": "True",
             "risk_variation_flag": "True",
-            "entry_time_variation": "1",
+            "entry_time_variation": "6",
             "risk_percent": "1.0",
             "move_sl_breakeven_criteria": "TP1",
-            "pending_order_time_expiration_minutes": "0",
+            "pending_order_time_expiration_minutes": "10",
             "close_opposite_positions_symbolwise": "True",
             "force_execute_market_orders": ""
         })
+
+        if not self.config.has_section('DISCORD'):
+            self.config.add_section('DISCORD')
 
         with open(self.file_path, "w") as configfile:
             self.config.write(configfile)

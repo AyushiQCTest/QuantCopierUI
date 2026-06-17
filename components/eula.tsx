@@ -12,33 +12,32 @@ interface EulaAgreementProps {
 export function EulaAgreement({ onAgree, onDisagree }: EulaAgreementProps) {
   const [isBottom, setIsBottom] = useState(false)
 
-  useEffect(() => {
-    const handleScroll = (e: Event) => {
-      const element = e.target as HTMLDivElement
-      const { scrollTop, scrollHeight, clientHeight } = element
-      if (scrollHeight - scrollTop <= clientHeight + 1) {
-        setIsBottom(true)
-      }
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
+    if (scrollHeight - scrollTop <= clientHeight + 1) {
+      setIsBottom(true)
     }
+  }
 
+  useEffect(() => {
     const scrollArea = document.querySelector("[data-radix-scroll-area-viewport]")
     if (scrollArea) {
-      scrollArea.addEventListener("scroll", handleScroll)
+      scrollArea.addEventListener("scroll", handleScroll as any)
     }
     return () => {
       if (scrollArea) {
-        scrollArea.removeEventListener("scroll", handleScroll)
+        scrollArea.removeEventListener("scroll", handleScroll as any)
       }
     }
-  }, [])
+  }, [handleScroll]) // Added handleScroll to dependencies
 
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold text-center dark:text-white">End User License Agreement</h2>
       <ScrollArea className="h-[600px] rounded-md border p-4 dark:border-gray-700">
         <div className="space-y-4 dark:text-gray-300">
-          <p>This End-User License Agreement (&quot;EULA&quot;) is a legal agreement between you and QuantTraderTools.com.</p>
-          <p>This EULA agreement governs your acquisition and use of our QuantCopier software (&quot;Software&quot;) directly from QuantTraderTools.com or indirectly through a QuantTraderTools.com authorized reseller or distributor (a &quot;Reseller&quot;).</p>
+          <p>This End-User License Agreement ("EULA") is a legal agreement between you and QuantTraderTools.com.</p>
+          <p>This EULA agreement governs your acquisition and use of our QuantCopier software ("Software") directly from QuantTraderTools.com or indirectly through a QuantTraderTools.com authorized reseller or distributor (a "Reseller").</p>
           <p>Please read this EULA agreement carefully before completing the installation process and using the QuantCopier software. It provides a license to use the QuantCopier software and contains warranty information and liability disclaimers.</p>
           <p>By installing and/or using the QuantCopier software, you are confirming your acceptance of the Software and agreeing to become bound by the terms of this EULA agreement.</p>
 
@@ -68,7 +67,7 @@ export function EulaAgreement({ onAgree, onDisagree }: EulaAgreementProps) {
           </ul>
 
           <h2 className="font-bold">Disclaimer of Liability</h2>
-          <p>The Software is provided &quot;as is&quot; and QuantTraderTools.com disclaims all warranties with regard to this Software, including all implied warranties of merchantability and fitness. In no event shall QuantTraderTools.com be liable for any special, direct, indirect, or consequential damages or any damages whatsoever resulting from loss of use, data, or profits, whether in an action of contract, negligence, or other tortious action, arising out of or in connection with the use or performance of this Software.</p>
+          <p>The Software is provided "as is" and QuantTraderTools.com disclaims all warranties with regard to this Software, including all implied warranties of merchantability and fitness. In no event shall QuantTraderTools.com be liable for any special, direct, indirect, or consequential damages or any damages whatsoever resulting from loss of use, data, or profits, whether in an action of contract, negligence, or other tortious action, arising out of or in connection with the use or performance of this Software.</p>
 
           <h2 className="font-bold">No Warranties</h2>
           <p>QuantTraderTools.com makes no warranty that the Software will meet your requirements or operate under your specific conditions of use. QuantTraderTools.com makes no warranty that operation of the Software will be secure, error-free, or free from interruption.</p>

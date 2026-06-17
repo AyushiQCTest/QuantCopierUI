@@ -39,10 +39,10 @@ def _resolve_component_key(exe_name: str) -> Optional[str]:
     # API sidecar (e.g., QuantCopierAPI.exe)
     if 'quantcopierapi' in name or name.endswith('api.exe') or ('api' in name and 'quantcopier' in name):
         return 'apiSidecar'
-    # QCDemo sidecar (e.g., QuantCopierTelegram.exe / qcdemo.exe)
-    if ('quantcopiertelegram' in name and 'ui' not in name) or 'qc-demo' in name or 'qcdemo' in name:
+    # QCDemo sidecar (e.g., QuantCopierDiscord.exe / qcdemo.exe)
+    if ('quantcopierdiscord' in name and 'ui' not in name) or 'qc-demo' in name or 'qcdemo' in name:
         return 'qcdemoSidecar'
-    # Main UI application (e.g., QuantCopierTelegramUI.exe, QuantCopierMT5.exe, QuantCopier.exe)
+    # Main UI application (e.g., QuantCopierDiscordUI.exe, QuantCopierMT5.exe, QuantCopier.exe)
     if 'quantcopier' in name or 'ui' in name:
         return 'mainInstaller'
     return None

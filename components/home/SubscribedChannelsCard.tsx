@@ -2,6 +2,8 @@
 import { useEffect, useState, useContext } from "react";
 import axios from "axios";
 import { ThemeContext } from "@/lib/theme-config";
+import { Settings } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 interface SelectedChannelsResponse {
   message: string;
@@ -14,10 +16,12 @@ export default function SubscribedChannelsCard() {
   const [currentPage, setCurrentPage] = useState(1);
   const channelsPerPage = 5; // 5 elements per page
   const { theme } = useContext(ThemeContext);
+  const router = useRouter();
+  const [isHovered, setIsHovered] = useState(false);
 
   useEffect(() => {
     axios
-      .get<SelectedChannelsResponse>("http://localhost:8001/get_selected_channels")
+      .get<SelectedChannelsResponse>("http://localhost:8000/discord/channels")
       .then((res) => {
         // Extract channel names from the returned data object.
         const selectedChannels = res.data.data;
@@ -49,10 +53,24 @@ export default function SubscribedChannelsCard() {
 
   return (
     <div 
-      className={`pt-12 p-6 ${  // Changed from p-6 to pt-12 p-6
-        theme === 'dark' ? 'bg-black border-gray-800' : 'bg-white border-gray-200'
-      } border rounded-lg shadow-lg flex-1`}
+      className={`p-6 ${theme === 'dark' ? 'bg-black border-gray-800' : 'bg-white border-gray-200'} border rounded-lg shadow-lg flex-1 relative group`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
+      {/* Add settings icon */}
+      {isHovered && (
+        <button
+          onClick={() => router.push('/onboarding?step=channel-select')}
+          className={`absolute top-4 left-4 p-2 rounded-full transition-colors ${
+            theme === "dark" 
+              ? "hover:bg-gray-800 text-gray-400 hover:text-white" 
+              : "hover:bg-gray-100 text-gray-600 hover:text-gray-900"
+          }`}
+        >
+          <Settings className="w-5 h-5" />
+        </button>
+      )}
+
       <h2 className={`text-2xl font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-800'} mb-4 text-center`}>
         Subscribed Channels
       </h2>

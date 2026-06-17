@@ -29,9 +29,9 @@ Use the Software for any purpose that QuantTraderTools.com considers a breach of
 
 Use your MetaTrader5 login credentials to place, execute, and manage trades.
 
-Send notifications to your Telegram account through a bot.
+Send notifications to your Discord account through a bot.
 
-Use your Telegram account for authentication
+Use your Telegram account for authentication and notifications
 
 5. DISCLAIMER - The Software is provided "as is," and QuantTraderTools.com disclaims all warranties with regard to this Software, including all implied warranties of merchantability and fitness. In no event shall QuantTraderTools.com be liable for any special, direct, indirect, or consequential damages or any damages resulting from loss of use, data, or profits, whether in an action of contract, negligence, or other tortious action arising out of or in connection with the use or performance of this Software.
 

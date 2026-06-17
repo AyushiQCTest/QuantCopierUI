@@ -2,7 +2,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import axios from 'axios';
 
-const API_BASE_URL = "http://localhost:8001";
+const API_BASE_URL = "http://localhost:8000";
 
 interface BackendDataContextType {
   authStatus: any;
@@ -13,11 +13,13 @@ interface BackendDataContextType {
   operationalSettings: any;
   isOnboardingComplete: boolean;
   isAuthenticated: boolean;
+  discordToken: string | null;
   fetchAuthStatus: (options?: { force?: boolean }) => Promise<any>;
   fetchUserInfo: (options?: { force?: boolean }) => Promise<any>;
   fetchBotChannelStatus: (options?: { force?: boolean }) => Promise<any>;
   fetchValidationData: (options?: { force?: boolean }) => Promise<any>;
   fetchOperationalSettings: (options?: { force?: boolean }) => Promise<any>;
+  fetchDiscordToken: (options?: { force?: boolean }) => Promise<any>;
   refreshAllData: () => Promise<void>;
 }
 
@@ -30,11 +32,13 @@ export const BackendDataContext = createContext<BackendDataContextType>({
   operationalSettings: null,
   isOnboardingComplete: false,
   isAuthenticated: false,
+  discordToken: null,
   fetchAuthStatus: async () => null,
   fetchUserInfo: async () => null,
   fetchBotChannelStatus: async () => null,
   fetchValidationData: async () => null,
   fetchOperationalSettings: async () => null,
+  fetchDiscordToken: async () => null,
   refreshAllData: async () => {},
 });
 
@@ -47,6 +51,7 @@ export const BackendDataProvider = ({ children }: { children: ReactNode }) => {
   const [operationalSettings, setOperationalSettings] = useState<any>(null);
   const [botStatusLastFetched, setBotStatusLastFetched] = useState<number | null>(null);
   const [initialAuthCheckDone, setInitialAuthCheckDone] = useState(false);
+  const [discordToken, setDiscordToken] = useState<string | null>(null);
   
   // Check if user is authenticated based on the actual response structure
   const isAuthenticated = authStatus?.status === "success" && 
@@ -207,22 +212,48 @@ export const BackendDataProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [operationalSettings, isAuthenticated]);
 
+  const fetchDiscordToken = useCallback(async (options?: { force?: boolean }) => {
+    const force = options?.force || false;
+    
+    // Skip if we already have data and aren't forcing
+    if (!force && discordToken !== null) {
+      return discordToken;
+    }
+    
+    try {
+      const res = await axios.get(`${API_BASE_URL}/discord/token`);
+      console.log("Discord token response:", res.data);
+      
+      // Check if we have a successful response with a token
+      if (res.data.status === "success" && res.data.discord_token) {
+        setDiscordToken(res.data.discord_token);
+        return res.data.discord_token;
+      } else {
+        console.log("No token in response:", res.data);
+        return null;
+      }
+    } catch (error) {
+      console.error("Error fetching discord token:", error);
+      return null;
+    }
+  }, [discordToken]);
+
   // Function to refresh all data - useful after login/authentication
   const refreshAllData = useCallback(async () => {
     console.log("Refreshing all data");
     const auth = await fetchAuthStatus({ force: true });
     
-    // If authenticated based on the actual response structure
     if (auth?.status === "success" && auth?.message === "User authenticated") {
       await Promise.all([
         fetchUserInfo({ force: true }),
         fetchValidationData({ force: true }),
-        fetchOperationalSettings({ force: true })
+        fetchOperationalSettings({ force: true }),
+        fetchDiscordToken({ force: true })
       ]);
       
       await fetchBotChannelStatus({ force: true });
     }
-  }, [fetchAuthStatus, fetchUserInfo, fetchValidationData, fetchOperationalSettings, fetchBotChannelStatus]);
+  }, [fetchAuthStatus, fetchUserInfo, fetchValidationData, fetchOperationalSettings, fetchBotChannelStatus, fetchDiscordToken]);
 
   // Only check auth status on initial load
   useEffect(() => {
@@ -240,9 +271,8 @@ export const BackendDataProvider = ({ children }: { children: ReactNode }) => {
       console.log("Auth status is authenticated, fetching dependent data");
       fetchUserInfo();
       fetchOperationalSettings();
-      fetchValidationData();
     }
-  }, [isAuthenticated, initialAuthCheckDone, fetchUserInfo, fetchOperationalSettings, fetchValidationData]);
+  }, [isAuthenticated, initialAuthCheckDone, fetchUserInfo, fetchOperationalSettings]);
 
   return (
     <BackendDataContext.Provider
@@ -255,11 +285,13 @@ export const BackendDataProvider = ({ children }: { children: ReactNode }) => {
         operationalSettings,
         isOnboardingComplete,
         isAuthenticated,
+        discordToken,
         fetchAuthStatus,
         fetchUserInfo,
         fetchBotChannelStatus,
         fetchValidationData,
         fetchOperationalSettings,
+        fetchDiscordToken,
         refreshAllData,
       }}
     >
