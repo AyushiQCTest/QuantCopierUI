@@ -25,7 +25,7 @@ interface SidebarProps {
 async function closeQuantCopierTelegram() {
   try {
     console.log("Closing existing QuantCopierDiscord");
-    const response = await fetch('http://127.0.0.1:8001/kill-telegram-copier', {
+    const response = await fetch('http://127.0.0.1:8000/kill-telegram-copier', {
       method: 'POST',
     });
     const data = await response.json();

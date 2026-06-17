@@ -35,7 +35,7 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
     // Re-fetch every time the modal opens so the version is always current
     const fetchVersion = async () => {
       try {
-        const response = await fetch("http://localhost:8001/api/version");
+        const response = await fetch("http://localhost:8000/api/version");
         if (response.ok) {
           const data = await response.json();
           setVersion(data.version);
@@ -88,7 +88,7 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
         console.warn("[AboutModal] Could not resolve install dir from Tauri:", error);
       }
 
-      const response = await fetch("http://localhost:8001/api/download-update", {
+      const response = await fetch("http://localhost:8000/api/download-update", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

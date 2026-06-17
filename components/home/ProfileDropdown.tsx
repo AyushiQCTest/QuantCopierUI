@@ -61,7 +61,7 @@ export default function ProfileDropdown() {
         // Fetch Telegram details
         if (!cachedTelegramDetails) {
           const telegramRes = await axios.get<TelegramDetails>(
-            "http://localhost:8001/get_user_info"
+            "http://localhost:8000/get_user_info"
           );
           cachedTelegramDetails = telegramRes.data;
           setTelegramDetails(telegramRes.data);
@@ -69,7 +69,7 @@ export default function ProfileDropdown() {
 
         // Fetch licenses
         if (!cachedLicenses) {
-          const licenseRes = await axios.get("http://localhost:8001/validate_user");
+          const licenseRes = await axios.get("http://localhost:8000/validate_user");
           const licensesObj = licenseRes.data.licenseInfo || {};
           const licensesArray: License[] = Object.keys(licensesObj).map((licenseKey) => {
             const details = licensesObj[licenseKey];
@@ -93,7 +93,7 @@ export default function ProfileDropdown() {
 
         // Fetch selected license from MT5 config
         if (cachedSelectedLicense === null) {
-          const mt5Res = await axios.get("http://localhost:8001/mt5/get_mt5_credentials");
+          const mt5Res = await axios.get("http://localhost:8000/mt5/get_mt5_credentials");
           cachedSelectedLicense = mt5Res.data?.license_key || null;
           setSelectedLicense(cachedSelectedLicense);
         }
@@ -137,7 +137,7 @@ export default function ProfileDropdown() {
       return (
         <div className="w-12 h-12 rounded-full overflow-hidden">
           <Image
-            src={`http://localhost:8001${telegramDetails.profilePhotoUrl}`}
+            src={`http://localhost:8000${telegramDetails.profilePhotoUrl}`}
             alt="Profile"
             width={48}
             height={48}

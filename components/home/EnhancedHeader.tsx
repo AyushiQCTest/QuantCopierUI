@@ -17,7 +17,7 @@ export default function EnhancedHeader({ toggleSidebar }: { toggleSidebar?: () =
 
   // Derive the profile photo URL from context (if present)
   const profilePhotoUrl = userInfo?.profilePhotoUrl && !imageError
-    ? `http://localhost:8001${userInfo.profilePhotoUrl}`
+    ? `http://localhost:8000${userInfo.profilePhotoUrl}`
     : null;
 
   const getThemeStyles = () => ({

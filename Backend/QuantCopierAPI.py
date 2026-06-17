@@ -1433,6 +1433,6 @@ if __name__ == "__main__":
     start_input_thread()
     initConfig()
     create_symbol_mapper_json()
-    uvicorn.run(app, host="127.0.0.1", port=8001, lifespan="on")
+    uvicorn.run(app, host="127.0.0.1", port=8000, lifespan="on")
     signal.signal(signal.SIGINT, lambda sig, frame: shutdown())
     signal.signal(signal.SIGTERM, lambda sig, frame: shutdown())

@@ -17,7 +17,7 @@ export default function SubscribedChannelsCard() {
 
   useEffect(() => {
     axios
-      .get<SelectedChannelsResponse>("http://localhost:8001/get_selected_channels")
+      .get<SelectedChannelsResponse>("http://localhost:8000/get_selected_channels")
       .then((res) => {
         // Extract channel names from the returned data object.
         const selectedChannels = res.data.data;

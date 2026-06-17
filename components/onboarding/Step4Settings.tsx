@@ -17,7 +17,7 @@ interface Step4SettingsProps {
   isRevisit: boolean;
 }
 
-const API_BASE_URL = "http://localhost:8001";
+const API_BASE_URL = "http://localhost:8000";
 
 export default function Step4Settings({ onBack, onNext, theme, isRevisit }: Step4SettingsProps) {
   const [settings, setSettings] = useState({

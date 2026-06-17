@@ -34,7 +34,7 @@ interface Step1MT5Props {
   isRevisit: boolean;
 }
 
-const API_BASE_URL = "http://localhost:8001";
+const API_BASE_URL = "http://localhost:8000";
 
 export default function Step1MT5({ onNext, onBack, theme, isRevisit }: Step1MT5Props) {
   const { toast } = useToast();

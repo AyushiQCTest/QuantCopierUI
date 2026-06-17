@@ -17,7 +17,7 @@ import EnhancedHeader from "@/components/home/EnhancedHeader";
 import Sidebar from "@/components/home/Sidebar";
 import { useBackendData } from "@/src/context/BackendDataContext";
 
-const API_BASE_URL = "http://localhost:8001";
+const API_BASE_URL = "http://localhost:8000";
 const totalSteps = 4;
 
 export default function OnboardingPage() {

@@ -22,7 +22,7 @@ interface Channel {
   selected?: boolean;
 }
 
-const API_BASE_URL = "http://localhost:8001";
+const API_BASE_URL = "http://localhost:8000";
 
 export default function Step2Alerts({ onNext, onBack, theme, isRevisit }: Step2AlertsProps) {
   const { toast } = useToast();
