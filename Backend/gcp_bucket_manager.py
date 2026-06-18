@@ -13,7 +13,7 @@ from google.oauth2 import service_account
 from pathlib import Path
 
 
-RELEASES_MANIFEST_BLOB = "releases.json"
+RELEASES_MANIFEST_BLOB = "Discord/releases.json"
 
 
 def normalize_storage_bucket(bucket_raw: str) -> str:

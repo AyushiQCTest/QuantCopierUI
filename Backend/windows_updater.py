@@ -41,11 +41,11 @@ STAGING_DIR_NAME = ".update_staging"
 
 # Known names for the main UI executable (tried in order during target discovery).
 MAIN_EXE_CANDIDATES = (
+    "QuantCopierTelegramUI.exe",
     "QuantCopierMT5Discord.exe",
-    "QuantCopierDiscordUI.exe",
     "QuantCopierMT5.exe",
     "QuantCopier.exe",
-    "quantcopiermt5discord.exe",
+    "quantcopiermt5.exe",
     "quantcopierui.exe",
 )
 

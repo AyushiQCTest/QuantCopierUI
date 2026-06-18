@@ -47,7 +47,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           BUCKET="gs://${{ secrets.FIREBASE_STORAGE_BUCKET }}"
-          VERSION_PREFIX="$BUCKET/v$VERSION"
+          VERSION_PREFIX="$BUCKET/Discord/v$VERSION"
           
           echo "Uploading to: $VERSION_PREFIX"
           
@@ -64,7 +64,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           BUCKET="gs://${{ secrets.FIREBASE_STORAGE_BUCKET }}"
-          VERSION_PREFIX="$BUCKET/v$VERSION"
+          VERSION_PREFIX="$BUCKET/Discord/v$VERSION"
           
           # Make files public for download
           gsutil -m acl ch -u AllUsers:R "$VERSION_PREFIX/*" || echo "Files already public or not found"
@@ -73,7 +73,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           BUCKET="gs://${{ secrets.FIREBASE_STORAGE_BUCKET }}"
-          VERSION_PREFIX="$BUCKET/v$VERSION"
+          VERSION_PREFIX="$BUCKET/Discord/v$VERSION"
           
           echo "Files in GCS bucket:"
           gsutil ls -lh "$VERSION_PREFIX/" || echo "Version prefix not found"
@@ -102,5 +102,5 @@ jobs:
       - name: Upload notification
         run: |
           echo "✓ Release v${{ steps.version.outputs.version }} uploaded to GCS"
-          echo "Location: gs://${{ secrets.FIREBASE_STORAGE_BUCKET }}/v${{ steps.version.outputs.version }}/"
+          echo "Location: gs://${{ secrets.FIREBASE_STORAGE_BUCKET }}/Discord/v${{ steps.version.outputs.version }}/"
           echo "✓ Archive function triggered to move old versions to Archive storage"
