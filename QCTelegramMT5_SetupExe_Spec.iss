@@ -51,7 +51,7 @@ Source: "{#ParentPath}\src-tauri\binaries\QuantCopierAPI-x86_64-pc-windows-msvc.
 Source: "{#ParentPath}\..\qcdemo\dist\QuantCopierTelegram.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ParentPath}\Backend\config.ini"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ParentPath}\Backend\symbol_mapper.json"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#ParentPath}\Backend\static\*"; DestDir: "{app}\static"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#ParentPath}\Backend\static\*"; DestDir: "{app}\static"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]
