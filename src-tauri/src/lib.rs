@@ -142,14 +142,25 @@ fn spawn_sidecar(app_handle: tauri::AppHandle) -> Result<(), String> {
 
     // Spawn sidecar
     println!("[tauri] Creating sidecar command...");
-    let sidecar_command = match app_handle.shell().sidecar("QuantCopierAPI") {
-        Ok(cmd) => cmd,
-        Err(e) => {
-            let err_msg = format!("[tauri] Failed to create sidecar command: {}", e);
-            eprintln!("{}", err_msg);
-            return Err(err_msg);
-        }
+    let resource_path = app_handle.path().resource_dir().map_err(|e| e.to_string())?;
+    
+    // Construct path to QuantCopierAPI.exe
+    let mut api_exe_path = resource_path.join("binaries").join("QuantCopierAPI.exe");
+    if !api_exe_path.exists() {
+         api_exe_path = resource_path.join("QuantCopierAPI.exe");
+    }
+    // Fallback for dev environment where Tauri creates the sidecar with target triple
+    if !api_exe_path.exists() {
+         api_exe_path = resource_path.join("binaries").join("QuantCopierAPI-x86_64-pc-windows-msvc.exe");
+    }
+
+    let cmd_name = if api_exe_path.exists() {
+         api_exe_path.to_string_lossy().to_string()
+    } else {
+        "binaries/QuantCopierAPI.exe".to_string()
     };
+
+    let sidecar_command = app_handle.shell().command(cmd_name);
     
     println!("[tauri] Spawning sidecar process...");
     let (mut rx, child) = match sidecar_command.spawn() {
