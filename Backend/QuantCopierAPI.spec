@@ -8,7 +8,6 @@ a = Analysis(
     datas=[
         ('.env', '.'),
         ('firebase-credentials.json', '.'),
-        ('firebase_service_account_key.json', '.'),
         ('config.ini', '.'),
         ('symbol_mapper.json', '.'),
     ],
