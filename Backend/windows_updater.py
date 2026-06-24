@@ -84,12 +84,18 @@ def resolve_install_dir(explicit: Optional[str] = None) -> Path:
     if explicit:
         return Path(explicit).expanduser().resolve()
 
+    # 3. pyinstaller parent heuristic
     if _is_frozen():
-        exe_parent = Path(sys.executable).resolve().parent
-        if exe_parent.name.lower() == "binaries":
-            return exe_parent.parent
+        exe_path = Path(sys.executable)
+        if exe_path.name.lower().startswith("quantcopier"):
+            if exe_path.parent.name == "binaries":
+                print(f"[resolve_install_dir] Sidecar detected in 'binaries'. Using parent: {exe_path.parent.parent}")
+                return exe_path.parent.parent.resolve()
+            print(f"[resolve_install_dir] Using sys.executable parent: {exe_path.parent}")
+            return exe_path.parent.resolve()
 
         # Running from PyInstaller temp directory — walk up to find install root
+        exe_parent = exe_path.parent
         if "temp" in exe_parent.as_posix().lower() or "_mei" in exe_parent.as_posix().lower():
             current = exe_parent
             for _ in range(6):

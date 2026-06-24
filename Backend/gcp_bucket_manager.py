@@ -31,7 +31,7 @@ def release_tag_from_manifest(data: dict) -> str:
 
 
 def blob_name_for_component(data: dict, component_key: str) -> Optional[str]:
-    """Build GCS object path for a manifest component (e.g. v1.3.3/QuantCopier.exe)."""
+    """Build GCS object path for a manifest component (e.g. Telegram/v1.3.3/QuantCopier.exe)."""
     files = data.get("files") if isinstance(data.get("files"), dict) else {}
     filename = files.get(component_key)
     if not filename:
@@ -39,7 +39,8 @@ def blob_name_for_component(data: dict, component_key: str) -> Optional[str]:
     tag = release_tag_from_manifest(data)
     if not tag:
         return None
-    return f"{tag}/{filename}"
+    base_dir = "Telegram"
+    return f"{base_dir}/{tag}/{filename}"
 
 
 def release_info_from_manifest(
@@ -162,7 +163,7 @@ class GCPBucketManager:
             bucket_name: Name of the GCS bucket containing releases
         """
         self.bucket_name = bucket_name or normalize_storage_bucket(
-            os.getenv("FIREBASE_STORAGE_BUCKET", "quantcopier-releases")
+            os.getenv("FIREBASE_STORAGE_BUCKET", "finsentric-website-hosting.firebasestorage.app")
         )
         try:
             self.client = self._create_storage_client()

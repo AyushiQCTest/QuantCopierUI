@@ -26,12 +26,16 @@ class TauriAutoUpdater {
 
       // Listen for manual update checks
       await listen('check-for-updates', () => {
-        this.checkForUpdates();
+        this.checkForUpdates().catch((e) =>
+          console.warn('[AutoUpdater] Background check-for-updates error:', e)
+        );
       });
 
-      // Check for updates on startup (non-blocking)
-      // Don't await to avoid delaying app startup
-      setTimeout(() => this.checkForUpdates(), 2000);
+      // Check for updates on startup (non-blocking, errors are silently swallowed)
+      setTimeout(() =>
+        this.checkForUpdates().catch((e) =>
+          console.warn('[AutoUpdater] Startup update check error:', e)
+        ), 2000);
 
       console.log('[AutoUpdater] Initialized successfully');
     } catch (error) {
@@ -61,10 +65,16 @@ class TauriAutoUpdater {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const body = await response.text().catch(() => '');
+        throw new Error(`Update check failed (HTTP ${response.status})${body ? ': ' + body.slice(0, 200) : ''}`);
       }
 
       const updateInfo: UpdateInfo = await response.json();
+
+      // Surface any server-side error field
+      if ((updateInfo as any).error) {
+        throw new Error((updateInfo as any).error);
+      }
 
       if (updateInfo.available) {
         console.log(
@@ -81,7 +91,8 @@ class TauriAutoUpdater {
       return updateInfo;
     } catch (error) {
       console.error('[AutoUpdater] Check failed:', error);
-      return null;
+      // Re-throw so callers (e.g. AboutModal) can surface the real message
+      throw error;
     } finally {
       this.isCheckingForUpdates = false;
     }

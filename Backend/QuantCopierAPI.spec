@@ -8,10 +8,11 @@ a = Analysis(
     datas=[
         ('.env', '.'),
         ('firebase-credentials.json', '.'),
+        ('firebase_service_account_key.json', '.'),
         ('config.ini', '.'),
         ('symbol_mapper.json', '.'),
     ],
-    hiddenimports=[],
+    hiddenimports=['dotenv'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -41,4 +42,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     version='api_version_info.txt',
+    icon=['favicon.ico'],
 )

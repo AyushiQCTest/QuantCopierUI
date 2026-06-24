@@ -18,7 +18,7 @@ type UpdateStatus = "idle" | "checking" | "update-available" | "up-to-date" | "e
 
 export function AboutModal({ isOpen, onClose }: AboutModalProps) {
   const { theme } = useContext(ThemeContext);
-  const [version, setVersion] = useState("1.3.2");
+  const [version, setVersion] = useState("1.3.4");
   const [releaseNotesUrl, setReleaseNotesUrl] = useState(
     "https://quant-copier-release-notes.vercel.app/"
   );
@@ -65,12 +65,19 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
           window.open(releaseNotesUrl, "_blank");
         }, 500);
       } else {
+        // manualCheck returned null only when already in-progress
         setUpdateStatus("error");
-        setErrorMessage("Failed to check for updates");
+        setErrorMessage("Update check already in progress, please wait.");
       }
     } catch (error) {
       setUpdateStatus("error");
-      setErrorMessage(error instanceof Error ? error.message : "An error occurred");
+      const msg = error instanceof Error ? error.message : String(error);
+      // Friendly message for common network failures
+      if (msg.includes("fetch") || msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+        setErrorMessage("Cannot reach update server. Make sure the backend is running.");
+      } else {
+        setErrorMessage(msg || "An error occurred while checking for updates.");
+      }
     }
   };
 

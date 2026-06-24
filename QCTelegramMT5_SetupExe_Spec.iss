@@ -6,7 +6,7 @@
 #define MyAppPublisher "QuantTraderTools"
 #define MyAppURL "QuantTraderTools.com"
 #define MyAppExeName "QuantCopierMT5.exe"
-#define ParentPath "{APP_DIR}"
+#define ParentPath "."
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
@@ -32,7 +32,7 @@ DefaultGroupName={#MyAppName}
 InfoBeforeFile={#ParentPath}\EULA.txt
 ; Remove the following line to run in administrative install mode (install for all users.)
 PrivilegesRequired=lowest
-OutputDir={OUTPUT_DIR}
+OutputDir=build
 OutputBaseFilename=QuantCopierMT5Setup
 SetupIconFile={#ParentPath}\src-tauri\icons\QuantCopierMT5TelegramSetup.ico
 Compression=lzma
@@ -49,8 +49,6 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#ParentPath}\src-tauri\target\release\QuantCopierTelegramUI.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ParentPath}\src-tauri\binaries\QuantCopierAPI-x86_64-pc-windows-msvc.exe"; DestDir: "{app}"; DestName: "QuantCopierAPI.exe"; Flags: ignoreversion
 Source: "{#ParentPath}\..\qcdemo\dist\QuantCopierTelegram.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#ParentPath}\Backend\config.ini"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#ParentPath}\Backend\symbol_mapper.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ParentPath}\Backend\static\*"; DestDir: "{app}\static"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 

@@ -179,6 +179,8 @@ async def login(params: SessionInput, background_tasks: BackgroundTasks):
             background_tasks.add_task(load_user_data_background, params.phoneNumber)
 
             return JSONResponse(content={"success": True, "sessionId": sessionId, "message": "Code sent successfully"}, status_code=200)
+    except (ConnectionError, TimeoutError) as e:
+        return JSONResponse(content={"success": False, "message": "Failed to connect to Telegram. Please check Windows Firewall or your VPN."}, status_code=502)
     except Exception as e:
         return JSONResponse(content={"success": False, "message": "Validation error"}, status_code=404)
 
@@ -311,7 +313,8 @@ async def auth_status():
     except RPCError as e:
         await client.disconnect()
         return JSONResponse(content={"status": "failed", "message": f"An error occurred: {str(e)}", "eulaAccepted": eula_accepted, "onboardingComplete": onboarding_complete }, status_code=403)
-    
+    except (ConnectionError, TimeoutError, Exception) as e:
+        return JSONResponse(content={"status": "failed", "message": "Failed to connect to Telegram. Please check your VPN or Firewall.", "eulaAccepted": eula_accepted, "onboardingComplete": onboarding_complete }, status_code=403)
 @app.post("/reset_auth")
 async def reset_auth():
     global TELEGRAM_AUTH_STATUS, TELEGRAM_CLIENT
@@ -1132,65 +1135,14 @@ def get_ui_version() -> str:
     if v:
         return v
 
-    print("[DEBUG][get_ui_version] VERSION file not found, using fallback '1.3.2'")
-    return "1.3.2"
+    print("[DEBUG][get_ui_version] VERSION file not found, using fallback '1.3.4'")
+    return "1.3.4"
 
 
 
-def get_latest_release_from_github() -> Optional[dict]:
-    """Fetch the latest release information from GitHub"""
-    try:
-        import urllib.request
-        
-        repo_url = "https://api.github.com/repos/AyushiQCTest/QuantCopierUI/releases"
-        req = urllib.request.Request(
-            repo_url,
-            headers={'User-Agent': 'QuantCopierAPI/1.0'}
-        )
-        
-        with urllib.request.urlopen(req, timeout=10) as response:
-            releases = json.loads(response.read().decode('utf-8'))
-            print(f"[DEBUG][get_latest_release_from_github] Fetched {len(releases)} release(s) from GitHub")
-            
-            if not releases:
-                return None
-            
-            # Get the latest non-prerelease
-            for release in releases:
-                if release.get('prerelease'):
-                    continue
-                
-                # Strip leading 'v' so version comparisons work correctly
-                # e.g. "v1.4.0" -> "1.4.0"
-                tag_name = release.get('tag_name', '').lstrip('v').strip()
-                print(f"[DEBUG][get_latest_release_from_github] Latest non-prerelease tag: '{tag_name}'")
-                
-                # Find installer asset
-                for asset in release.get('assets', []):
-                    if asset['name'].endswith('.exe'):
-                        return {
-                            'version': tag_name,
-                            'name': asset['name'],
-                            'download_url': asset['browser_download_url'],
-                            'size': asset['size'],
-                            'published_at': release.get('published_at'),
-                        }
-
-                # Release exists but has no .exe asset yet — still return version info
-                # so the UI can show an update is available even without a direct download
-                if tag_name:
-                    print(f"[DEBUG][get_latest_release_from_github] No .exe asset found for {tag_name}, returning version only")
-                    return {
-                        'version': tag_name,
-                        'name': None,
-                        'download_url': None,
-                        'published_at': release.get('published_at'),
-                    }
-        
-        return None
-    except Exception as e:
-        print(f"[DEBUG][get_latest_release_from_github] Error: {e}")
-        return None
+# NOTE: GitHub API fallback removed.
+# Version checks are authoritative only from the GCS releases.json produced
+# by the full installer pipeline.  See get_latest_release_from_storage_manifest().
 
 
 def get_latest_release_from_storage_manifest() -> Optional[dict]:
@@ -1257,9 +1209,9 @@ def compare_versions(v1: str, v2: str) -> int:
             return 0
     except Exception as e:
         print(f"[DEBUG][compare_versions] Parse error: v1='{v1}' v2='{v2}' error={e}")
-        # Return -1 (treat as update available) so the user is not silently stuck
-        # on an old version if something unexpected is in the version strings.
-        return -1
+        # Return 0 (treat as equal / no update) — a bad version string should never
+        # produce a false "update available" result.
+        return 0
 
 
 @app.get("/api/check-update")
@@ -1267,63 +1219,67 @@ async def check_update():
     """
     Check if a new version of QuantCopier UI is available.
 
-    Checks GCP storage manifest first, then legacy GCP scan, then GitHub.
-    Returns update availability status and version info.
+    The ONLY source of truth is the GCS releases.json produced by the full
+    installer pipeline (upload-to-gcs.yml).  No GitHub API or legacy bucket
+    scan fallback — those sources don't reflect the real installer state.
+
+    Returns:
+        available        – True if a newer version exists in the manifest
+        currentVersion   – what this installation reports
+        latestVersion    – what releases.json says is latest
+        downloadUrl      – GCS download URL for the mainInstaller component
+        error            – set only on hard failures (5xx)
     """
     try:
-        from gcp_bucket_manager import gcp_bucket_manager
-        
         current_version = get_ui_version()
         print(f"[DEBUG][check_update] Current version: '{current_version}'")
-        
-        # Try releases manifest first, then legacy GCP scan, then GitHub.
+
+        # ------------------------------------------------------------------ #
+        # Single source of truth: GCS releases.json                          #
+        # ------------------------------------------------------------------ #
         latest_info = get_latest_release_from_storage_manifest()
         print(f"[DEBUG][check_update] Storage manifest result: {latest_info}")
 
-        gcp_info = None
-        if not latest_info and gcp_bucket_manager.bucket:
-            gcp_info = gcp_bucket_manager.get_latest_version("QuantCopier.exe")
-            print(f"[DEBUG][check_update] GCP bucket scan result: {gcp_info}")
-            latest_info = gcp_info
-
         if not latest_info:
-            latest_info = get_latest_release_from_github()
-            print(f"[DEBUG][check_update] GitHub release result: {latest_info}")
-        
-        if not latest_info:
-            print("[DEBUG][check_update] No update source returned data.")
+            print("[DEBUG][check_update] releases.json unavailable or empty.")
             return JSONResponse(
                 content={
                     "available": False,
                     "currentVersion": current_version,
-                    "message": "Could not check for updates"
+                    "latestVersion": None,
+                    "message": "Could not reach the update server. Please try again later.",
                 },
-                status_code=200
+                status_code=200,
             )
-        
+
         latest_version = latest_info.get('version', '').strip().lstrip('v')
         print(f"[DEBUG][check_update] Latest version resolved: '{latest_version}'")
 
+        if not latest_version:
+            print("[DEBUG][check_update] releases.json did not contain a version field.")
+            return JSONResponse(
+                content={
+                    "available": False,
+                    "currentVersion": current_version,
+                    "latestVersion": None,
+                    "message": "releases.json is missing a version field.",
+                },
+                status_code=200,
+            )
+
         available = compare_versions(current_version, latest_version) < 0
         print(f"[DEBUG][check_update] Update available: {available}")
-        
-        # Get download URL if available
-        download_url = None
-        if latest_info and latest_info.get('download_url'):
-            download_url = latest_info['download_url']
-        elif gcp_info and 'blob_name' in gcp_info:
-            download_url = gcp_bucket_manager.get_download_url(gcp_info['blob_name'])
-        
+
         return JSONResponse(
             content={
                 "available": available,
                 "currentVersion": current_version,
                 "latestVersion": latest_version,
-                "downloadUrl": download_url,
-                "releaseNotes": latest_info.get('releaseNotes', latest_info.get('body', '')),
-                "publishedAt": latest_info.get('publishedAt', latest_info.get('published_at')),
+                "downloadUrl": latest_info.get('download_url'),
+                "releaseNotes": latest_info.get('releaseNotes', ''),
+                "publishedAt": latest_info.get('updated_at') or latest_info.get('updatedAt'),
             },
-            status_code=200
+            status_code=200,
         )
     except Exception as e:
         print(f"[DEBUG][check_update] Unexpected error: {e}")
@@ -1331,7 +1287,7 @@ async def check_update():
         traceback.print_exc()
         return JSONResponse(
             content={"available": False, "error": str(e)},
-            status_code=500
+            status_code=500,
         )
 
 
