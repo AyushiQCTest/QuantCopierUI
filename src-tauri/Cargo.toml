@@ -1,6 +1,6 @@
 [package]
 name = "QuantCopierTelegramUI"
-version = "1.3.2"
+version = "1.3.5"
 description = "QuantCopier - TradeCopier built with Tauri NextJS for Telegram and MetaTrader5"
 authors = ["Dilip Rajkumar"]
 license = ""

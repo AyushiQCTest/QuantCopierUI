@@ -22,8 +22,8 @@ class DBService:
     def __init__(self):
         if not self._initialized:
             try:
-                self.proxy_url = os.getenv('LICENSE_PROXY_URL', 'https://us-central1-your-project-id.cloudfunctions.net/getSubscriberDetails')
-                self.proxy_password = os.getenv('LICENSE_CHECK_PASSWORD', 'your-secret-password')
+                self.proxy_url = os.getenv('LICENSE_PROXY_URL', 'https://us-central1-quanttradertools.cloudfunctions.net/checkLicense')
+                self.proxy_password = os.getenv('LICENSE_CHECK_PASSWORD', '7xK9')
                 self._initialized = True
             except Exception as e:
                 raise ConnectionError(f"Failed to initialize Proxy settings: {e}")

@@ -1135,8 +1135,8 @@ def get_ui_version() -> str:
     if v:
         return v
 
-    print("[DEBUG][get_ui_version] VERSION file not found, using fallback '1.3.4'")
-    return "1.3.4"
+    print("[DEBUG][get_ui_version] VERSION file not found, using fallback '1.3.5'")
+    return "1.3.5"
 
 
 

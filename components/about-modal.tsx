@@ -18,7 +18,7 @@ type UpdateStatus = "idle" | "checking" | "update-available" | "up-to-date" | "e
 
 export function AboutModal({ isOpen, onClose }: AboutModalProps) {
   const { theme } = useContext(ThemeContext);
-  const [version, setVersion] = useState("1.3.4");
+  const [version, setVersion] = useState("1.3.5");
   const [releaseNotesUrl, setReleaseNotesUrl] = useState(
     "https://quant-copier-release-notes.vercel.app/"
   );
