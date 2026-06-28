@@ -5,7 +5,7 @@ import uuid
 import signal
 import uvicorn
 import requests
-from DB_Service_FireBaseAdmin import DBService
+from DB_Service import DBService
 import threading
 from pydantic import BaseModel
 from dotenv import load_dotenv

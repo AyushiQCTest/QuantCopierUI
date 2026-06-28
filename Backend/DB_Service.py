@@ -1,14 +1,11 @@
 import os
-import requests
-from datetime import datetime, timedelta
-from dateparser import parse
-from pprint import pprint
+import sys
+import json
 import pytz
-
-"""
-Database secrets are currently deprecated and use a legacy Firebase token generator.
-Update your source code with the Firebase Admin SDK. See DB_Service_FireBaseAdmin.py
-"""
+from pprint import pprint
+from datetime import datetime
+from dateparser import parse
+import requests
 
 class DBService:
     _instance = None
@@ -24,96 +21,75 @@ class DBService:
 
     def __init__(self):
         if not self._initialized:
-            # Get database URL and auth token from environment variables
-            self.base_url = os.getenv('FIREBASE_DATABASE_URL')
-            self.auth_token = os.getenv('FIREBASE_AUTH_TOKEN')
-            
-            if not self.base_url:
-                raise ValueError("FIREBASE_DATABASE_URL environment variable not set")
-            if not self.auth_token:
-                raise ValueError("FIREBASE_AUTH_TOKEN environment variable not set")
-            
-            self._initialized = True
+            try:
+                self.proxy_url = os.getenv('LICENSE_PROXY_URL', 'https://us-central1-your-project-id.cloudfunctions.net/getSubscriberDetails')
+                self.proxy_password = os.getenv('LICENSE_CHECK_PASSWORD', 'your-secret-password')
+                self._initialized = True
+            except Exception as e:
+                raise ConnectionError(f"Failed to initialize Proxy settings: {e}")
 
-    def _make_request(self, path):
-        """Helper method to make authenticated GET requests"""
-        url = f"{self.base_url}{path}.json"
-        params = {'auth': self.auth_token}
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            return response.json()
-        raise ConnectionError(f"Failed to fetch data: {response.status_code}")
+    def _fetch_data(self, mobile=None):
+        try:
+            payload = {"password": self.proxy_password}
+            if mobile:
+                payload["phoneNumber"] = mobile
+                
+            response = requests.post(self.proxy_url, json=payload, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success":
+                    return data.get("data")
+            return None
+        except Exception as e:
+            print(f"Error fetching data from proxy: {e}")
+            return None
 
     def is_licenseKey_valid(self, license_key):
         """
-        Check if a license key is valid based on its expiration date.
+        Check if a license key is valid based on its expiration date
         Returns: (bool, str, str) - (is_valid, subscription_type, product_type)
-        
-        Logic:
-          - If subscriptionType is "lifetime": always valid.
-          - If an explicit expirationDate exists, validate against it.
-          - Otherwise, calculate expiration from subscriptionDate based on:
-                * monthly: +30 days
-                * half-yearly: +182 days
-                * yearly: +365 days
-          - A license is valid if the current datetime is <= the computed expiration.
         """
         try:
-            # Search in cached subscription data first
-            for subscriptions in self._subscription_cache.values():
-                for sub in subscriptions:
-                    if sub.get("licenseKey") == license_key:
-                        exp_str = sub.get("expirationDate", "").strip()
-                        if not exp_str:
-                            # No expiration date, treat as lifetime
-                            return True, sub.get("subscriptionType", ""), sub.get("productType", "")
-                        else:
-                            # Use explicit expiration date
-                            expiry_date = parse(exp_str)
-                            if expiry_date:
-                                # Convert current time to UTC if expiry_date is timezone-aware
-                                current_time = datetime.now(pytz.UTC) if expiry_date.tzinfo else datetime.now()
-                                if current_time <= expiry_date:
-                                    return True, sub.get("subscriptionType", ""), sub.get("productType", "")
-                                else:
-                                    return False, sub.get("subscriptionType", ""), sub.get("productType", "")
-            
-            # If not found in cache, query all subscribers
-            all_users = self._make_request('/subscriberDetails')
+            # Get all subscribers
+            all_users = self._fetch_data()
             if not all_users:
                 return False, "", ""
 
+            # Search for the license key
             for user_data in all_users.values():
                 if "subscription" not in user_data:
                     continue
+
                 for sub in user_data["subscription"]:
                     if sub.get("licenseKey") == license_key:
-                        exp_str = sub.get("expirationDate", "").strip()
-                        if not exp_str:
-                            # No expiration date, treat as lifetime
-                            return True, sub.get("subscriptionType", ""), sub.get("productType", "")
-                        else:
-                            # Use explicit expiration date
-                            expiry_date = parse(exp_str)
+                        # If lifetime subscription, always valid
+                        if sub.get("subscriptionType") == "lifetime":
+                            return True, "lifetime", sub.get("productType", "")
+
+                        # For other types, check expiration
+                        if sub.get("expirationDate"):
+                            expiry_date = parse(sub["expirationDate"])
                             if expiry_date:
                                 # Convert current time to UTC if expiry_date is timezone-aware
                                 current_time = datetime.now(pytz.UTC) if expiry_date.tzinfo else datetime.now()
-                                if current_time <= expiry_date:
-                                    return True, sub.get("subscriptionType", ""), sub.get("productType", "")
-                                else:
-                                    return False, sub.get("subscriptionType", ""), sub.get("productType", "")
+                                return (
+                                    current_time <= expiry_date,
+                                    sub.get("subscriptionType", ""),
+                                    sub.get("productType", "")
+                                )
+
             return False, "", ""
+
         except Exception as e:
             print(f"Error checking license validity: {e}")
             return False, "", ""
 
     def is_valid_user(self, mobile):
         """
-        Check if a user exists and has subscriptions.
-        Returns:
-            (bool, dict) where the dict has two keys:
-              - "valid": {licenseKey: {expirationDate, productType, subscriptionType}} for valid licenses,
-              - "invalid": {licenseKey: {expirationDate, productType, subscriptionType}} for invalid licenses.
+        Check if a user exists and has valid subscriptions
+        Returns: 
+            If valid user: True, {licenseKey: {expirationDate, productType}} (valid licenses)
+            If invalid user: False, {licenseKey: {expirationDate, productType}} (invalid licenses)
         """
         try:
             # Check if we have cached subscription data
@@ -121,7 +97,7 @@ class DBService:
                 user_data = {'subscription': self._subscription_cache[mobile]}
             else:
                 # Get user data and cache the subscription
-                user_data = self._make_request(f'/subscriberDetails/{mobile}')
+                user_data = self._fetch_data(mobile)
                 if user_data and 'subscription' in user_data:
                     self._subscription_cache[mobile] = user_data['subscription']
             # If no data found or no subscription
@@ -130,6 +106,7 @@ class DBService:
 
             valid_licenses = {}
             invalid_licenses = {}
+            has_valid_license = False
 
             for sub in user_data['subscription']:
                 is_valid, sub_type, product_type = self.is_licenseKey_valid(sub['licenseKey'])
@@ -138,14 +115,15 @@ class DBService:
                     'productType': product_type,
                     'subscriptionType': sub.get('subscriptionType', '')
                 }
+
                 if is_valid:
+                    has_valid_license = True
                     valid_licenses[sub['licenseKey']] = license_info
                 else:
                     invalid_licenses[sub['licenseKey']] = license_info
 
-            # If there is at least one valid license, return True plus the full details.
-            has_valid = len(valid_licenses) > 0
-            return has_valid, {"valid": valid_licenses, "invalid": invalid_licenses}
+            return has_valid_license, valid_licenses if has_valid_license else invalid_licenses
+
         except Exception as e:
             print(f"Error checking user validity: {e}")
             return False, {}
@@ -160,6 +138,7 @@ class DBService:
                 for sub in subscriptions:
                     if sub.get("licenseKey") == license_key:
                         mt5_accounts = []
+                        
                         # Handle both single account (dict) and multiple accounts (list) cases
                         if isinstance(sub.get('mt5_accounts'), dict):
                             if sub['mt5_accounts']:  # Check if not empty
@@ -169,14 +148,16 @@ class DBService:
 
                         # Check if license is valid
                         is_valid, _, _ = self.is_licenseKey_valid(license_key)
+
                         # Add validity status to each account
                         for account in mt5_accounts:
                             account['licenseKey'] = license_key
                             account['licenseKeyValid'] = is_valid
+
                         return True, mt5_accounts
             
             # If not found in cache, query all subscribers
-            all_users = self._make_request('/subscriberDetails')
+            all_users = self._fetch_data()
             if not all_users:
                 return False, []
 
@@ -184,14 +165,15 @@ class DBService:
             for mobile, user_data in all_users.items():
                 if "subscription" not in user_data:
                     continue
-                
+
                 # Cache the subscription data if not already cached
                 if mobile not in self._subscription_cache:
                     self._subscription_cache[mobile] = user_data["subscription"]
-                    
+
                 for sub in user_data["subscription"]:
                     if sub.get("licenseKey") == license_key:
                         mt5_accounts = []
+                        
                         # Handle both single account (dict) and multiple accounts (list) cases
                         if isinstance(sub.get('mt5_accounts'), dict):
                             if sub['mt5_accounts']:  # Check if not empty
@@ -201,12 +183,16 @@ class DBService:
 
                         # Check if license is valid
                         is_valid, _, _ = self.is_licenseKey_valid(license_key)
+
                         # Add validity status to each account
                         for account in mt5_accounts:
                             account['licenseKey'] = license_key
                             account['licenseKeyValid'] = is_valid
+
                         return True, mt5_accounts
+
             return False, []
+
         except Exception as e:
             print(f"Error getting MT5 accounts: {e}")
             return False, []
@@ -216,7 +202,7 @@ class DBService:
         Lists all subscriber details in the database.
         """
         try:
-            all_data = self._make_request('/subscriberDetails')
+            all_data = self._fetch_data()
             if not all_data:
                 return False, {}
 
@@ -224,11 +210,14 @@ class DBService:
             print(f"Number of documents: {len(all_data)}")
             print("DOCUMENTS:")
             pprint(all_data)
+
             return True, {"subscriberDetails": all_data}
+
         except Exception as e:
             print(f"Error listing documents: {e}")
             return False, {}
 
+# Usage example
 if __name__ == "__main__":
     db_service = DBService()
     
@@ -243,8 +232,8 @@ if __name__ == "__main__":
 
     # Test license validity
     license_key = "QC-TG-M12-250329-DIRA-6372517F"
-    is_valid_lk, sub_type, product_type = db_service.is_licenseKey_valid(license_key)
-    print(f"\nLicense validity check for {license_key}: {is_valid_lk} || Subscription Type: {sub_type} || Product Type: {product_type}")    
+    is_valid, sub_type, product_type = db_service.is_licenseKey_valid(license_key)
+    print(f"\nLicense validity check for {license_key}: {is_valid} || Subscription Type: {sub_type} || Product Type: {product_type}")    
     
     # Test MT5 accounts
     success, accounts = db_service.get_valid_MT5_accounts(license_key)

@@ -7,7 +7,6 @@ a = Analysis(
     binaries=[],
     datas=[
         ('.env', '.'),
-        ('firebase-credentials.json', '.'),
         ('config.ini', '.'),
         ('symbol_mapper.json', '.'),
     ],
